@@ -1,49 +1,12 @@
-require('dotenv').config();
-const { chromium } = require('playwright');
-const path = require('path');
-const express = require('express'); // Untuk CCTV
-const fs = require('fs');
-
 const METAMASK_PATH = path.join(__dirname, 'metamask-extension').replace(/\\/g, '/');
 const USER_DATA_DIR = path.join(__dirname, 'chrome_data').replace(/\\/g, '/');
-const PREVIEW_PATH = path.join(__dirname, 'preview.png');
 
 const SEED_PHRASE = process.env.SECRET_SEED_PHRASE;
 const PASSWORD = 'BotPassword123!';
-const PORT = process.env.PORT || 3000;
-
-// === CCTV SERVER (Gunakan Browser Anda untuk melihat Bot!) ===
-const app = express();
-app.get('/', (req, res) => {
-    res.send(`
-        <html>
-            <body style="background:#111; color:#00ffc8; text-align:center; font-family:sans-serif;">
-                <h1>📺 GemMiner CCTV Live</h1>
-                <p>Status: Bot Berjalan ⛏️ | <a href="/screenshot" target="_blank" style="color:#fff;">Buka Gambar Full</a></p>
-                <div style="border:5px solid #00ffc8; display:inline-block; border-radius:10px; overflow:hidden;">
-                    <img id="live" src="/screenshot" style="max-width:100%; height:auto;">
-                </div>
-                <script>
-                    setInterval(() => {
-                        document.getElementById('live').src = '/screenshot?t=' + Date.now();
-                    }, 5000);
-                </script>
-            </body>
-        </html>
-    `);
-});
-app.get('/screenshot', (req, res) => {
-    if (fs.existsSync(PREVIEW_PATH)) {
-        res.sendFile(PREVIEW_PATH);
-    } else {
-        res.status(404).send('Belum ada gambar (Gim sedang dimuat)');
-    }
-});
-app.listen(PORT, () => console.log(`\n-> [CCTV] Siap tayang di PORT: ${PORT}\n`));
 
 (async () => {
     if (!SEED_PHRASE || SEED_PHRASE.length < 20) {
-        console.error("ERROR: Harap isi variabel SECRET_SEED_PHRASE di file .env atau Dashboard Railway Anda!");
+        console.error("ERROR: Harap isi variabel SECRET_SEED_PHRASE di Dashboard Railway Anda!");
         process.exit(1);
     }
 
@@ -151,8 +114,6 @@ app.listen(PORT, () => console.log(`\n-> [CCTV] Siap tayang di PORT: ${PORT}\n`)
                 console.log("=> Setup MetaMask Selesai!");
             } catch (innerErr) {
                 console.log(">> Error spesifik dalam mencari tombol: Bot gagal klik (UI MetaMask tidak sesuai tebakan).", innerErr.message);
-                console.log(">> Menyimpan screenshot layar ke error_layar.png agar kita bisa lihat wujud aslinya.");
-                await metamaskPage.screenshot({ path: 'error_layar.png' });
             }
         }
 
@@ -266,36 +227,33 @@ app.listen(PORT, () => console.log(`\n-> [CCTV] Siap tayang di PORT: ${PORT}\n`)
             const maxWait = 25000;
             
             while (timeWaited < maxWait) {
-                // Selalu ambil daftar halaman terbaru (mencegah referensi lama)
                 const popup = context.pages().find(p => p.url().includes('notification.html'));
                 
                 if (popup) {
                     try {
                         await popup.bringToFront();
-                        // Ambil gambar untuk CCTV agar user bisa lihat apa yg terjadi di popup
-                        await popup.screenshot({ path: PREVIEW_PATH }).catch(() => {});
-
-                        // === RADAR TOMBOL PERSETUJUAN (SUPER CLICKER) ===
-                        // Kita cari menggunakan data-testid (Standar MetaMask) DAN Teks
                         
-                        // 1. Tombol Next / Confirm / Approve / Connect
-                        const mainBtn = popup.locator('button[data-testid="page-container-footer-next"], button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Switch network"), button:has-text("Sign")').first();
+                        // Detektor tombol tunggal untuk semua aksi (Approve, Switch, Next, Connect, Sign)
+                        // Menggunakan data-testid jauh lebih stabil daripada teks
+                        const actionBtn = popup.locator('button[data-testid="page-container-footer-next"], button[data-testid="confirmation-submit-button"], button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Switch network"), button:has-text("Sign")').first();
 
-                        if (await mainBtn.isVisible({timeout: 1000})) {
-                            const txt = await mainBtn.innerText();
-                            console.log(`- Menekan tombol persetujuan: [${txt}]`);
-                            await mainBtn.click();
+                        if (await actionBtn.isVisible({timeout: 1000})) {
+                            const label = await actionBtn.innerText().catch(() => "Confirm");
+                            console.log(`- Mendeteksi perintah MetaMask: [${label}]. Mengklik...`);
+                            await actionBtn.click({ force: true });
+                            // Tunggu sebentar setelah klik agar UI MetaMask sempat berubah
+                            await gamePage.waitForTimeout(2000);
                         }
                     } catch (pErr) {
-                        // Konsol lebih tenang saat tutup paksa
+                        // Popup mungkin tertutup mendadak, abaikan eror
                     }
                 }
                 
-                await gamePage.waitForTimeout(1500);
-                timeWaited += 1500;
+                await gamePage.waitForTimeout(1000);
+                timeWaited += 1000;
                 
-                // Exit jika popup sudah habis
-                if (!context.pages().find(p => p.url().includes('notification.html')) && timeWaited > 7000) {
+                // Jika selama 8 detik tidak ada popup lagi, kemungkinan besar sudah selesai
+                if (!context.pages().find(p => p.url().includes('notification.html')) && timeWaited > 8000) {
                     break;
                 }
             }
@@ -453,7 +411,6 @@ app.listen(PORT, () => console.log(`\n-> [CCTV] Siap tayang di PORT: ${PORT}\n`)
                 else if (target.y < py) arah = 'ArrowUp';
 
                 if (arah) {
-                    await gamePage.screenshot({ path: PREVIEW_PATH }).catch(() => {}); // Update CCTV
                     await gamePage.focus('canvas').catch(() => {});
                     await gamePage.keyboard.down(arah);
                     // Durasi tekan yang bervariasi agar tidak kaku
