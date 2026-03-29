@@ -1,0 +1,5 @@
+.env
+node_modules/
+chrome_data/
+*.zip
+error_layar.png
