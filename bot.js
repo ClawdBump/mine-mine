@@ -1,16 +1,49 @@
 require('dotenv').config();
 const { chromium } = require('playwright');
 const path = require('path');
+const express = require('express'); // Untuk CCTV
+const fs = require('fs');
 
 const METAMASK_PATH = path.join(__dirname, 'metamask-extension').replace(/\\/g, '/');
 const USER_DATA_DIR = path.join(__dirname, 'chrome_data').replace(/\\/g, '/');
+const PREVIEW_PATH = path.join(__dirname, 'preview.png');
 
 const SEED_PHRASE = process.env.SECRET_SEED_PHRASE;
 const PASSWORD = 'BotPassword123!';
+const PORT = process.env.PORT || 3000;
+
+// === CCTV SERVER (Gunakan Browser Anda untuk melihat Bot!) ===
+const app = express();
+app.get('/', (req, res) => {
+    res.send(`
+        <html>
+            <body style="background:#111; color:#00ffc8; text-align:center; font-family:sans-serif;">
+                <h1>📺 GemMiner CCTV Live</h1>
+                <p>Status: Bot Berjalan ⛏️ | <a href="/screenshot" target="_blank" style="color:#fff;">Buka Gambar Full</a></p>
+                <div style="border:5px solid #00ffc8; display:inline-block; border-radius:10px; overflow:hidden;">
+                    <img id="live" src="/screenshot" style="max-width:100%; height:auto;">
+                </div>
+                <script>
+                    setInterval(() => {
+                        document.getElementById('live').src = '/screenshot?t=' + Date.now();
+                    }, 5000);
+                </script>
+            </body>
+        </html>
+    `);
+});
+app.get('/screenshot', (req, res) => {
+    if (fs.existsSync(PREVIEW_PATH)) {
+        res.sendFile(PREVIEW_PATH);
+    } else {
+        res.status(404).send('Belum ada gambar (Gim sedang dimuat)');
+    }
+});
+app.listen(PORT, () => console.log(`\n-> [CCTV] Siap tayang di PORT: ${PORT}\n`));
 
 (async () => {
     if (!SEED_PHRASE || SEED_PHRASE.length < 20) {
-        console.error("ERROR: Harap isi variabel SECRET_SEED_PHRASE di file .env dengan 12 kata dompet kosong Anda!");
+        console.error("ERROR: Harap isi variabel SECRET_SEED_PHRASE di file .env atau Dashboard Railway Anda!");
         process.exit(1);
     }
 
@@ -233,55 +266,36 @@ const PASSWORD = 'BotPassword123!';
             const maxWait = 25000;
             
             while (timeWaited < maxWait) {
-                // Cari apakah ada jendela metamask popup
+                // Selalu ambil daftar halaman terbaru (mencegah referensi lama)
                 const popup = context.pages().find(p => p.url().includes('notification.html'));
                 
                 if (popup) {
                     try {
                         await popup.bringToFront();
-                        
-                        // Cek tombol persetujuan jaringan (Approve Network)
-                        const btnApprove = popup.locator('button', { hasText: /Approve/i }).first();
-                        if (await btnApprove.isVisible({timeout: 500})) {
-                            await btnApprove.click();
-                            console.log("- Menyetujui jaringan Base Network...");
-                        }
-                        
-                        // Cek ganti jaringan (Switch Network)
-                        const btnSwitch = popup.locator('button', { hasText: /Switch network/i }).first();
-                        if (await btnSwitch.isVisible({timeout: 500})) {
-                            await btnSwitch.click();
-                            console.log("- Beralih ke jaringan Base Network...");
-                        }
+                        // Ambil gambar untuk CCTV agar user bisa lihat apa yg terjadi di popup
+                        await popup.screenshot({ path: PREVIEW_PATH }).catch(() => {});
 
-                        // Cek Connect (Next -> Connect)
-                        const btnNext = popup.locator('button', { hasText: /Next/i }).first();
-                        if (await btnNext.isVisible({timeout: 500})) {
-                            await btnNext.click();
-                            console.log("- Menekan Lanjut koneksi...");
-                        }
-                        const btnConnect = popup.locator('button', { hasText: /Connect/i }).first();
-                        if (await btnConnect.isVisible({timeout: 500})) {
-                            await btnConnect.click();
-                            console.log("- Menyetujui Koneksi Dompet...");
-                        }
+                        // === RADAR TOMBOL PERSETUJUAN (SUPER CLICKER) ===
+                        // Kita cari menggunakan data-testid (Standar MetaMask) DAN Teks
                         
-                        // Cek Signature (Sign)
-                        const btnSign = popup.locator('button', { hasText: /Sign/i }).first();
-                        if (await btnSign.isVisible({timeout: 500})) {
-                            await btnSign.click();
-                            console.log("- Menandatangani persetujuan masuk (Sign) !");
+                        // 1. Tombol Next / Confirm / Approve / Connect
+                        const mainBtn = popup.locator('button[data-testid="page-container-footer-next"], button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Switch network"), button:has-text("Sign")').first();
+
+                        if (await mainBtn.isVisible({timeout: 1000})) {
+                            const txt = await mainBtn.innerText();
+                            console.log(`- Menekan tombol persetujuan: [${txt}]`);
+                            await mainBtn.click();
                         }
-                        
-                    } catch (ignore) {}
+                    } catch (pErr) {
+                        // Konsol lebih tenang saat tutup paksa
+                    }
                 }
                 
-                // Jeda 1 detik sebelum ngecek lagi
-                await gamePage.waitForTimeout(1000);
-                timeWaited += 1000;
+                await gamePage.waitForTimeout(1500);
+                timeWaited += 1500;
                 
-                // Jika popup sudah tidak ada dan kita udah nunggu min 5 detik, kemungkinan selesai!
-                if (!context.pages().find(p => p.url().includes('notification.html')) && timeWaited > 5000) {
+                // Exit jika popup sudah habis
+                if (!context.pages().find(p => p.url().includes('notification.html')) && timeWaited > 7000) {
                     break;
                 }
             }
@@ -439,6 +453,7 @@ const PASSWORD = 'BotPassword123!';
                 else if (target.y < py) arah = 'ArrowUp';
 
                 if (arah) {
+                    await gamePage.screenshot({ path: PREVIEW_PATH }).catch(() => {}); // Update CCTV
                     await gamePage.focus('canvas').catch(() => {});
                     await gamePage.keyboard.down(arah);
                     // Durasi tekan yang bervariasi agar tidak kaku
