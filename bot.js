@@ -1,3 +1,7 @@
+const path = require('path');
+const { chromium } = require('playwright');
+require('dotenv').config();
+
 const METAMASK_PATH = path.join(__dirname, 'metamask-extension').replace(/\\/g, '/');
 const USER_DATA_DIR = path.join(__dirname, 'chrome_data').replace(/\\/g, '/');
 
