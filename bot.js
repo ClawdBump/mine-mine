@@ -507,21 +507,43 @@ function log(msg) {
                     let target = null;
                     let minScore = Infinity;
 
+                    // Definisikan nilai kelangkaan (Semakin besar = semakin prioritas)
+                    const rarityMap = {
+                        "SILVER": 15, 
+                        "GOLD": 30, 
+                        "DIAMOND": 60, 
+                        "EMERALD": 65, 
+                        "BAICRYSTAL": 90, 
+                        "VOIDORE": 100,
+                        "ARTIFACT_RELIC": 150, 
+                        "ARTIFACT_PRISM": 160, 
+                        "ARTIFACT_VOID_SHARD": 170
+                    };
+
                     for (let y = py - radius; y <= py + radius; y++) {
                         for (let x = px - radius; x <= px + radius; x++) {
                             const tile = getTile(x, y);
                             const def = BLOCK_DEF[tile];
                             
                             if (def && def.name && !["AIR", "CAVE", "DIRT", "STONE", "BEDROCK", "LAVA", "GRASS"].includes(def.name.toUpperCase())) {
+                                const oreName = def.name.toUpperCase();
                                 const dx = x - px;
                                 const dy = y - py;
                                 const dist = Math.sqrt(dx * dx + dy * dy);
+                                
+                                // Ambil skor kelangkaan, default 0 untuk Coal/Iron/Copper
+                                const rarityScore = rarityMap[oreName] || 0;
+                                
+                                // Bonus kedalaman (masih dipertahankan agar bot cenderung ke bawah jika skor sama)
                                 const depthBonus = dy * 0.15; 
-                                const finalScore = dist - depthBonus;
+
+                                // LOGIKA BARU: Rarity score dikalikan 2 untuk memberikan dampak besar pada prioritas
+                                // Semakin besar pengurang, semakin "kecil" finalScore, sehingga menjadi target utama
+                                const finalScore = dist - (rarityScore * 2) - depthBonus;
 
                                 if (finalScore < minScore) {
                                     minScore = finalScore;
-                                    target = { x, y, name: def.name, realDist: dist };
+                                    target = { x, y, name: def.name, realDist: dist, rarity: rarityScore };
                                 }
                             }
                         }
@@ -545,7 +567,8 @@ function log(msg) {
 
                 const { px, py, target } = radar;
                 if (loopCount % 3 === 0) {
-                    log(`-> [RADAR] Target: ${target.name} di (${target.x}, ${target.y}). Jarak: ${target.realDist.toFixed(1)}`);
+                    const prefix = target.rarity >= 40 ? "⭐ [RARE]" : "-> [RADAR]";
+                    log(`${prefix} Target: ${target.name} di (${target.x}, ${target.y}). Jarak: ${target.realDist.toFixed(1)}`);
                 }
 
                 // Navigasi GoTo (X dulu baru Y)
