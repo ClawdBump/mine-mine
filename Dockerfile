@@ -9,8 +9,8 @@ RUN npm install
 # Salin skrip dan MetaMask
 COPY . .
 
-# Install alat ajaib: X Virtual Framebuffer (Layar Palsu)
-RUN apt-get update && apt-get install -y xvfb
+# Install alat visual: X Virtual Framebuffer, VNC Server, dan noVNC (Web Client)
+RUN apt-get update && apt-get install -y xvfb x11vnc novnc websockify
 
 # Variabel Lingkungan agar Chrome menemukan TV Gaibnya
 ENV DISPLAY=:99
