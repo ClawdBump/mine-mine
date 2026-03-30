@@ -156,65 +156,116 @@ const PASSWORD = 'BotPassword123!';
         try {
 
             // Fase 1: Klik Mint Access (Wajib Sukses Beruntun)
-            console.log("1. Menganalisis layar dan frame tersembunyi untuk mencari '#burnEntryBtn' (Menunggu tanpa batas)...");
+            // STRATEGI: Gunakan JavaScript DOM click langsung, BUKAN Playwright .click()
+            // untuk menghindari "intercepts pointer events" dari overlay burnEntryScreen
+            console.log("1. Menganalisis layar untuk '#burnEntryBtn' via JavaScript DOM (bypass overlay)...");
             
             let mintKena = false;
             while (!mintKena) {
-                // Cari di halaman luar biasa
-                const mintLuar = gamePage.locator('#burnEntryBtn');
-                if (await mintLuar.isVisible({timeout: 2000}).catch(()=>false)) {
-                    await mintLuar.click({ force: true });
-                    mintKena = true;
-                    console.log("-> Mint sukses di Layar Utama!");
-                    break;
-                } 
+                // METODE UTAMA: JavaScript DOM click langsung (Anti-Overlay)
+                const clicked = await gamePage.evaluate(() => {
+                    const btn = document.getElementById('burnEntryBtn');
+                    if (btn) {
+                        // Hapus semua elemen overlay yang menutupi tombol
+                        const screen = document.getElementById('burnEntryScreen');
+                        if (screen) {
+                            screen.style.pointerEvents = 'none';
+                            // Juga set semua child div ke pointer-events none kecuali tombol
+                            screen.querySelectorAll('div').forEach(d => {
+                                if (d.id !== 'burnEntryBtn') d.style.pointerEvents = 'none';
+                            });
+                        }
+                        btn.click();
+                        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                        return true;
+                    }
+                    return false;
+                }).catch(() => false);
                 
-                // Cari membabi-buta di setiap Iframe
+                if (clicked) {
+                    mintKena = true;
+                    console.log("-> Mint sukses via JavaScript DOM click (Overlay dinonaktifkan)!");
+                    break;
+                }
+                
+                // Cari juga di setiap Iframe
                 for (const frame of gamePage.frames()) {
-                     const fBtn = frame.locator('#burnEntryBtn');
-                     if (await fBtn.isVisible({timeout: 1000}).catch(()=>false)) {
-                         await fBtn.click({ force: true });
-                         mintKena = true;
-                         console.log("-> Mint Kena! Ditemukan di dalam Iframe tersembunyi!");
-                         break;
-                     }
+                    const fClicked = await frame.evaluate(() => {
+                        const btn = document.getElementById('burnEntryBtn');
+                        if (btn) {
+                            const screen = document.getElementById('burnEntryScreen');
+                            if (screen) screen.style.pointerEvents = 'none';
+                            btn.click();
+                            btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                            return true;
+                        }
+                        if (typeof _burnEntryClick === 'function') { _burnEntryClick(); return true; }
+                        return false;
+                    }).catch(() => false);
+                    
+                    if (fClicked) {
+                        mintKena = true;
+                        console.log("-> Mint Kena via JavaScript di dalam Iframe!");
+                        break;
+                    }
                 }
                 
                 if (mintKena) break;
                 
-                // Bypass injeksi
-                console.log("-> (Mencari... Menyuntikkan _burnEntryClick ke semua dimensi layar...)");
-                for (const frame of gamePage.frames()) {
-                     await frame.evaluate(() => {
-                         if (typeof _burnEntryClick === 'function') _burnEntryClick();
-                         const btn = document.getElementById('burnEntryBtn');
-                         if (btn) btn.click();
-                     }).catch(() => {});
-                }
-                await gamePage.waitForTimeout(3000); // Tunggu hasil klik Bypass, tapi kita tidak tahu 100% apakah berhasil kecuali layar berganti.
+                console.log("-> (Menunggu tombol burnEntryBtn muncul...)");
+                await gamePage.waitForTimeout(3000);
                 
-                // Jika halaman menampakkan popup wallet, artinya Mint Kena tembus tanpa diketahui Playwright
-                const curMmLnk = gamePage.locator('button, div').filter({ hasText: /^MetaMask$/i }).first();
-                if (await curMmLnk.isVisible({timeout: 2000})) {
+                // Cek apakah popup wallet sudah muncul (bukti mint tembus)
+                const walletVisible = await gamePage.evaluate(() => {
+                    const els = document.querySelectorAll('button, div');
+                    for (const el of els) {
+                        if (el.textContent && el.textContent.trim() === 'MetaMask') return true;
+                    }
+                    return false;
+                }).catch(() => false);
+                
+                if (walletVisible) {
                     mintKena = true;
                     console.log("-> Bukti Mint tertembus: Pilihan dompet muncul!");
                 }
             }
             
+            // Bersihkan overlay burnEntryScreen agar tidak mengganggu klik selanjutnya
+            await gamePage.evaluate(() => {
+                const screen = document.getElementById('burnEntryScreen');
+                if (screen) {
+                    screen.style.pointerEvents = 'none';
+                    screen.style.display = 'none';
+                }
+            }).catch(() => {});
+            
             await gamePage.waitForTimeout(2000);
             console.log("2. Menunggu munculnya pilihan dompet dan memilih MetaMask...");
             let mmKena = false;
             while (!mmKena) {
-                const mmLnk = gamePage.locator('button, div').filter({ hasText: /^MetaMask$/i }).first();
-                if (await mmLnk.isVisible({timeout: 2000})) {
-                    await mmLnk.click();
+                // Gunakan JavaScript DOM click untuk menghindari overlay interception
+                const mmClicked = await gamePage.evaluate(() => {
+                    const els = document.querySelectorAll('button, div');
+                    for (const el of els) {
+                        if (el.textContent && el.textContent.trim() === 'MetaMask' && el.offsetParent !== null) {
+                            el.click();
+                            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                            return true;
+                        }
+                    }
+                    return false;
+                }).catch(() => false);
+                
+                if (mmClicked) {
                     mmKena = true;
-                    console.log("-> Berhasil menekan tombol MetaMask!");
+                    console.log("-> Berhasil menekan tombol MetaMask via JavaScript DOM!");
                 } else {
-                    const mmLnk2 = gamePage.locator('text="MetaMask"').first();
-                    if (await mmLnk2.isVisible({timeout: 2000})) {
-                        await mmLnk2.click();
+                    // Fallback: Playwright force click
+                    const mmLnk = gamePage.locator('button, div').filter({ hasText: /^MetaMask$/i }).first();
+                    if (await mmLnk.isVisible({timeout: 2000}).catch(() => false)) {
+                        await mmLnk.click({ force: true });
                         mmKena = true;
+                        console.log("-> Berhasil menekan tombol MetaMask via force click!");
                     }
                 }
                 if (!mmKena) await gamePage.waitForTimeout(1000);
