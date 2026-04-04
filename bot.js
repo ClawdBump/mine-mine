@@ -188,9 +188,31 @@ function log(msg) {
                 await metamaskPage.locator('button', { hasText: /Import my wallet/i }).click();
                 log("  [0.4] ✓ Password dibuat dan wallet di-import!");
 
-                log("  [0.5] ✓ Setup MetaMask Selesai!");
-
-                log("  [0.6] ✓ Tab MetaMask Bersih.");
+                // ==============================
+                // CLEANUP: Tunggu dan tutup congrats popup
+                // ==============================
+                log("  [0.5] Menunggu layar konfirmasi (Congrats)...");
+                await metamaskPage.waitForTimeout(5000);
+                
+                for (let i = 0; i < 6; i++) {
+                    const infoBtn = metamaskPage.locator(
+                        'button:has-text("Got it"), ' +
+                        'button:has-text("Next"), ' +
+                        'button:has-text("Done"), ' +
+                        'button:has-text("Close"), ' +
+                        'button[aria-label="Close"]'
+                    ).first();
+                    
+                    if (await infoBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                        const txt = await infoBtn.innerText().catch(() => "Tombol");
+                        log(`  [0.5] Klik: [${txt}]`);
+                        await infoBtn.click({ force: true });
+                        await metamaskPage.waitForTimeout(1500);
+                    } else {
+                        break; 
+                    }
+                }
+                log("  [0.5] ✓ Tab MetaMask Bersih.");
 
                 // ==============================
                 // SETUP JARINGAN BASE (Manual)
