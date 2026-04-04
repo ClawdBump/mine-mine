@@ -249,7 +249,7 @@ function log(msg) {
                     const baseRow = metamaskPage.locator('.networks-tab__item, .network-card, .add-network__network-list-item', { hasText: 'Base Mainnet' }).filter({ has: metamaskPage.locator('h6') }).first();
                     const addBtn = baseRow.locator('button.add-network__add-button, button:has-text("Add")').first();
 
-                    if (await addBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                    if (await addBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
                         log("  [0.7] Klik 'Add' untuk Base...");
                         await addBtn.click();
                         await metamaskPage.waitForTimeout(2000);
@@ -274,10 +274,6 @@ function log(msg) {
                         const finalNetwork = metamaskPage.locator('[data-testid="network-display"], .network-display', { hasText: /Base/i }).first();
                         await finalNetwork.waitFor({ state: 'visible', timeout: 10000 });
                         log("  [0.7] ✅ KONFIRMASI: Jaringan sekarang adalah Base Mainnet.");
-                    } else {
-                        log("  [WARNING] 'Base' tidak ditemukan di daftar populer. Mencoba buka langsung lewat URL...");
-                        await metamaskPage.goto(`chrome-extension://${extensionId}/home.html#settings/networks/add-network`);
-                        await metamaskPage.waitForTimeout(3000);
                     }
                 } catch (netErr) {
                     log(`  [WARNING] Gagal alur penambahan jaringan: ${netErr.message}`);
