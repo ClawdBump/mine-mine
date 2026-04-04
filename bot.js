@@ -362,84 +362,43 @@ function log(msg) {
                 return false;
             }, { timeout: 120000, interval: 2000, label: 'burnEntryBtn' });
             
-            log("[FASE 2] ✓ Mint Access berhasil diklik!");
+            log("[FASE 2] ✓ Tombol '#burnEntryBtn' diklik.");
 
             // ==============================
             // FASE 3: PILIH METAMASK DI WEBSITE
             // ==============================
             log("\n[FASE 3] Mencari dan memilih 'MetaMask' di website...");
-            await gamePage.waitForTimeout(3000); // Tunggu modal muncul
+            await gamePage.waitForTimeout(4000); // Tunggu modal muncul dengan sabar
 
             await waitForCondition(gamePage, async () => {
-                // Cari opsi "MetaMask" di website
+                // Cari opsi "MetaMask" di website — HANYA KLIK SEKALI
                 const metaMaskOption = gamePage.locator('div, button, span').filter({ hasText: /^MetaMask$/i }).first();
                 
                 if (await metaMaskOption.isVisible({ timeout: 2000 }).catch(() => false)) {
                     log("  [3.0] Tombol MetaMask ditemukan di website! Mengklik...");
                     await metaMaskOption.click({ force: true });
-                    return true;
+                    return true; 
                 }
                 
-                // Fallback JS click
+                // Fallback JS click jika tombol tidak terdeteksi Playwright
                 const clickedJS = await gamePage.evaluate(() => {
                     const el = Array.from(document.querySelectorAll('div, button, span')).find(x => x.innerText.trim() === 'MetaMask');
-                    if (el) { el.click(); return true; }
+                    if (el && el.offsetParent !== null) { el.click(); return true; }
                     return false;
                 }).catch(() => false);
                 
                 return clickedJS;
-            }, { timeout: 45000, interval: 2500, label: 'opsi MetaMask di website' });
+            }, { timeout: 30000, interval: 3000, label: 'opsi MetaMask di website' });
 
             log("[FASE 3] ✓ MetaMask di website diklik. Menunggu popup koneksi...");
-            await gamePage.waitForTimeout(3000);
+            await gamePage.waitForTimeout(4000); 
 
-            // Bersihkan overlay agar tidak mengganggu fase selanjutnya
+            // Bersihkan overlay (seperti layar pembuka) jika masih ada
             await gamePage.evaluate(() => {
                 const screen = document.getElementById('burnEntryScreen');
                 if (screen) { screen.style.pointerEvents = 'none'; screen.style.display = 'none'; }
             }).catch(() => {});
             
-            // VERIFIKASI: Tunggu hingga popup wallet atau tombol MetaMask benar-benar muncul
-            log("[FASE 2] Memverifikasi: Menunggu popup wallet muncul...");
-            await waitForCondition(gamePage, async () => {
-                return await gamePage.evaluate(() => {
-                    const els = document.querySelectorAll('button, div');
-                    for (const el of els) {
-                        if (el.textContent && el.textContent.trim() === 'MetaMask' && el.offsetParent !== null) return true;
-                    }
-                    return false;
-                }).catch(() => false);
-            }, { timeout: 15000, interval: 1000, label: 'popup wallet MetaMask' });
-            log("[FASE 2] ✓ Popup wallet terverifikasi muncul!");
-
-            // ==============================
-            // FASE 3: PILIH METAMASK
-            // ==============================
-            log("\n[FASE 3] Memilih MetaMask...");
-            
-            const mmClicked = await gamePage.evaluate(() => {
-                const els = document.querySelectorAll('button, div');
-                for (const el of els) {
-                    if (el.textContent && el.textContent.trim() === 'MetaMask' && el.offsetParent !== null) {
-                        el.click();
-                        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                        return true;
-                    }
-                }
-                return false;
-            }).catch(() => false);
-            
-            if (!mmClicked) {
-                // Fallback: Playwright force click
-                const mmLnk = gamePage.locator('button, div').filter({ hasText: /^MetaMask$/i }).first();
-                await mmLnk.click({ force: true, timeout: 5000 });
-            }
-            log("[FASE 3] ✓ MetaMask dipilih!");
-            
-            // VERIFIKASI: Tunggu popup MetaMask notification benar-benar muncul
-            log("[FASE 3] Memverifikasi: Menunggu popup notifikasi MetaMask...");
-            await gamePage.waitForTimeout(2000);
-
             // ==============================
             // FASE 4: APPROVE SEMUA POPUP METAMASK (Sekuensial)
             // ==============================
