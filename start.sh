@@ -1,5 +1,5 @@
 # 1. Menyalakan Xvfb (Virtual Display) di background
-Xvfb :99 -screen 0 1024x768x24 &
+Xvfb :99 -screen 0 800x600x24 &
 sleep 2
 
 # 2. Tambahkan ini agar bot tahu layar mana yang digunakan

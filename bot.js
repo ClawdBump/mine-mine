@@ -368,7 +368,15 @@ function log(msg) {
             // FASE 3: PILIH METAMASK DI WEBSITE
             // ==============================
             log("\n[FASE 3] Mencari dan memilih 'MetaMask' di website...");
-            await gamePage.waitForTimeout(4000); // Tunggu modal muncul dengan sabar
+            
+            // Pembersihan awal: Jika ada popup MetaMask yang muncul otomatis, tutup dulu agar tidak bentrok
+            const strayPopups = context.pages().filter(p => p.url().includes('notification.html'));
+            for (const p of strayPopups) {
+                log("  [3.x] Menutup popup otomatis yang menghalangi...");
+                await p.close().catch(() => {});
+            }
+
+            await gamePage.waitForTimeout(4000); // Tunggu modal muncul
 
             await waitForCondition(gamePage, async () => {
                 // Cari opsi "MetaMask" di website — HANYA KLIK SEKALI
@@ -380,7 +388,7 @@ function log(msg) {
                     return true; 
                 }
                 
-                // Fallback JS click jika tombol tidak terdeteksi Playwright
+                // Fallback JS click
                 const clickedJS = await gamePage.evaluate(() => {
                     const el = Array.from(document.querySelectorAll('div, button, span')).find(x => x.innerText.trim() === 'MetaMask');
                     if (el && el.offsetParent !== null) { el.click(); return true; }
@@ -390,8 +398,8 @@ function log(msg) {
                 return clickedJS;
             }, { timeout: 30000, interval: 3000, label: 'opsi MetaMask di website' });
 
-            log("[FASE 3] ✓ MetaMask di website diklik. Menunggu popup koneksi...");
-            await gamePage.waitForTimeout(4000); 
+            log("[3.0] ✓ MetaMask di website diklik. Menunggu popup koneksi...");
+            await gamePage.waitForTimeout(5000); 
 
             // Bersihkan overlay (seperti layar pembuka) jika masih ada
             await gamePage.evaluate(() => {
@@ -406,56 +414,39 @@ function log(msg) {
             
             let popupCount = 0;
             let noPopupStreak = 0;
-            const MAX_NO_POPUP_STREAK = 10; // 10 detik tidak ada popup = selesai
-            
+            const MAX_NO_POPUP_STREAK = 15; 
+            const handledPopups = new Set(); // Melacak popup yang sudah diproses
+
             while (noPopupStreak < MAX_NO_POPUP_STREAK) {
-                const popup = context.pages().find(p => p.url().includes('notification.html'));
+                const popup = context.pages().find(p => p.url().includes('notification.html') && !handledPopups.has(p));
                 
                 if (popup) {
-                    noPopupStreak = 0; // Reset streak
+                    noPopupStreak = 0;
+                    popupCount++;
+                    handledPopups.add(popup);
+                    log(`\n[4.${popupCount}] Mendeteksi Popup MetaMask (${popup.url()})...`);
+                    
                     try {
+                        await popup.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
                         await popup.bringToFront();
-                        // Tunggu popup selesai render
-                        await popup.waitForLoadState('domcontentloaded').catch(() => {});
-                        await popup.waitForTimeout(500);
                         
-                        const actionBtn = popup.locator(
-                            'button[data-testid="page-container-footer-next"], ' +
-                            'button[data-testid="confirmation-submit-button"], ' +
-                            'button:has-text("Next"), ' +
-                            'button:has-text("Connect"), ' +
-                            'button:has-text("Approve"), ' +
-                            'button:has-text("Switch network"), ' +
-                            'button:has-text("Switch"), ' + // Fallback untuk Base
-                            'button:has-text("Sign")'
-                        ).first();
-
-                        if (await actionBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                            const label = await actionBtn.innerText().catch(() => "Confirm");
-                            log(`  [4.${++popupCount}] Perintah MetaMask: [${label}] — Mengklik...`);
-                            await actionBtn.click({ force: true });
+                        // Cari tombol Connect/Next/Approve/Confirm/Sign
+                        const actionBtn = popup.locator('button:has-text("Connect"), button:has-text("Next"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Setuju")').first();
+                        
+                        if (await actionBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
+                            const btnText = await actionBtn.innerText().catch(() => "Aksi");
+                            log(`  [4.${popupCount}] Klik: [${btnText}]`);
+                            await actionBtn.click();
                             
-                            // VERIFIKASI: Tunggu popup benar-benar tertutup atau berubah
-                            log(`  [4.${popupCount}] Menunggu popup selesai diproses...`);
-                            await popup.waitForTimeout(2000);
-                            
-                            // Cek apakah popup sudah tertutup
-                            const stillExists = context.pages().find(p => p.url().includes('notification.html'));
-                            if (stillExists) {
-                                // Popup masih ada, mungkin ada tombol lain (multi-step)
-                                log(`  [4.${popupCount}] Popup masih terbuka, lanjut scan...`);
-                            } else {
-                                log(`  [4.${popupCount}] ✓ Popup tertutup.`);
-                            }
+                            // Tunggu proses selesai di dalam popup
+                            await popup.waitForTimeout(3000);
                         }
                     } catch (pErr) {
-                        // Popup tertutup mendadak = sukses
-                        log(`  [4.x] Popup tertutup mendadak (normal).`);
+                        log(`  [4.x] Popup tertutup atau error: ${pErr.message}`);
                     }
                 } else {
                     noPopupStreak++;
                 }
-                
                 await gamePage.waitForTimeout(1000);
             }
             
