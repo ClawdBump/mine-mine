@@ -445,26 +445,35 @@ function log(msg) {
                     log(`\n[4.${popupCount}] Memproses Jendela MetaMask (${popup.url()})...`);
                     
                     try {
-                        // Tunggu render selesai
+                        // Tunggu render awal
                         await popup.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
-                        await popup.bringToFront().catch(() => {});
                         
-                        // Cari tombol Connect/Next/Approve/Confirm/Sign/Sign-in
-                        const actionBtn = popup.locator('button:has-text("Connect"), button:has-text("Next"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Setuju")').first();
-                        
-                        if (await actionBtn.isVisible({ timeout: 12000 }).catch(() => false)) {
-                            const btnText = await actionBtn.innerText().catch(() => "Aksi");
-                            log(`  [4.${popupCount}] Klik: [${btnText}]`);
+                        // SUB-LOOP: Tangani multi-step di dalam SATU jendela popup (misal: Next -> Connect)
+                        let stepCount = 0;
+                        while (!popup.isClosed() && stepCount < 5) {
+                            stepCount++;
+                            await popup.bringToFront().catch(() => {});
                             
-                            // Pastikan fokus sebelum klik
-                            await actionBtn.focus().catch(() => {});
-                            await actionBtn.click({ force: true });
+                            // Cari tombol aksi: Next, Connect, Approve, Confirm, Sign, Sign-in
+                            const actionBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Setuju")').first();
                             
-                            // Beri waktu proses internal MetaMask
-                            await popup.waitForTimeout(3500);
+                            if (await actionBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                                const btnText = await actionBtn.innerText().catch(() => "Aksi");
+                                log(`  [4.${popupCount}.${stepCount}] Klik: [${btnText}]`);
+                                
+                                await actionBtn.focus().catch(() => {});
+                                await actionBtn.click({ force: true });
+                                
+                                // Tunggu sebentar agar UI MetaMask terupdate ke langkah berikutnya
+                                await popup.waitForTimeout(2000);
+                            } else {
+                                // Tidak ada lagi tombol yang bisa diklik di jendela ini
+                                break; 
+                            }
                         }
+                        log(`  [4.${popupCount}] Selesai memproses jendela ini.`);
                     } catch (pErr) {
-                        log(`  [4.x] Info: Jendela MetaMask tertutup/dipindahkan (${pErr.message})`);
+                        log(`  [4.x] Info: Jendela MetaMask ditutup atau selesai.`);
                     }
                 } else {
                     noPopupStreak++;
