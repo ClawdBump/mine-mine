@@ -226,19 +226,26 @@ function log(msg) {
                 log("  [0.5] ✓ Tab MetaMask Bersih.");
 
                 // ==============================
-                // SETUP JARINGAN BASE (Manual)
+                // SETUP JARINGAN BASE (Manual Flow sesuai saran User)
                 // ==============================
-                log("\n[SETUP] Menambahkan Jaringan Base secara manual...");
-                await metamaskPage.goto(`chrome-extension://${extensionId}/home.html#settings/networks/add-network`);
-                await metamaskPage.waitForLoadState('domcontentloaded');
-                await metamaskPage.waitForTimeout(3000);
-
+                log("\n[SETUP] Menambahkan Jaringan Base sesuai alur visual...");
+                
                 try {
-                    log("  [0.7] Mencari Base di daftar jaringan populer...");
-                    // Tunggu daftar muncul
-                    await metamaskPage.waitForSelector('button:has-text("Add")', { timeout: 10000 });
+                    // 1. Klik opsi Ethereum Mainnet (Pojok kiri atas)
+                    log("  [0.6] Klik pemilih jaringan (Top-left)...");
+                    const networkSelector = metamaskPage.locator('[data-testid="network-display"], .network-display').first();
+                    await networkSelector.click();
+                    await metamaskPage.waitForTimeout(1500);
 
-                    // Cari baris yang berisi teks "Base" dan klik tombol "Add" di baris tersebut
+                    // 2. Klik button "Add network" (seperti yang Anda tunjukkan)
+                    log("  [0.6] Klik button 'Add network'...");
+                    const addNetworkBtn = metamaskPage.locator('button:has-text("Add network")').first();
+                    await addNetworkBtn.click();
+                    await metamaskPage.waitForLoadState('domcontentloaded');
+                    await metamaskPage.waitForTimeout(3000);
+
+                    // 3. Cari Base di daftar jaringan populer
+                    log("  [0.7] Mencari Base di daftar jaringan populer...");
                     const baseRow = metamaskPage.locator('.networks-tab__item, .network-card', { hasText: /Base/i }).first();
                     const addBtn = baseRow.locator('button:has-text("Add")');
 
@@ -262,26 +269,12 @@ function log(msg) {
                             log("  [0.7] ✓ Berhasil berpindah ke jaringan Base!");
                         }
                     } else {
-                        log("  [WARNING] Tombol 'Add' untuk Base tidak ditemukan di daftar populer. Mencoba cara manual...");
-                        // Fallback ke manual jika tidak ada di daftar populer
-                        const manualBtn = metamaskPage.locator('button:has-text("Add a network manually")');
-                        await manualBtn.click();
-                        await metamaskPage.waitForTimeout(2000);
-                        
-                        const inputs = metamaskPage.locator('input');
-                        await inputs.nth(0).fill('Base');
-                        await inputs.nth(1).fill('https://mainnet.base.org');
-                        await inputs.nth(2).fill('8453');
-                        await inputs.nth(3).fill('ETH');
-                        await inputs.nth(4).fill('https://basescan.org');
-                        
-                        await metamaskPage.locator('button:has-text("Save")').click();
-                        await metamaskPage.waitForTimeout(2000);
-                        const switchBtn2 = metamaskPage.locator('button', { hasText: /Switch to Base|Switch/i }).first();
-                        if (await switchBtn2.isVisible().catch(() => false)) await switchBtn2.click();
+                        log("  [WARNING] 'Base' tidak ditemukan di daftar populer. Mencoba buka langsung lewat URL...");
+                        await metamaskPage.goto(`chrome-extension://${extensionId}/home.html#settings/networks/add-network`);
+                        await metamaskPage.waitForTimeout(3000);
                     }
                 } catch (netErr) {
-                    log(`  [WARNING] Gagal setup jaringan: ${netErr.message}. Mencoba lanjut...`);
+                    log(`  [WARNING] Gagal alur penambahan jaringan: ${netErr.message}`);
                 }
                 
                 await metamaskPage.waitForTimeout(2000);
