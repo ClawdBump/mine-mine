@@ -58,6 +58,12 @@ function log(msg) {
         
         // Cari halaman MetaMask yang sudah terbuka
         let metamaskPage = context.pages().find(p => p.url().includes('chrome-extension://'));
+        let extensionId = "";
+
+        if (metamaskPage) {
+            extensionId = metamaskPage.url().split('/')[2];
+            log(`[SETUP] ID ditemukan via Tab: ${extensionId}`);
+        }
         
         // Jika tidak ada tab MetaMask, coba tunggu sebentar
         if (!metamaskPage) {
@@ -69,7 +75,6 @@ function log(msg) {
             log("[SETUP] Tab MetaMask tidak muncul otomatis. Mencoba membuka paksa...");
             
             // Cari ID ekstensi secara dinamis
-            let extensionId = "";
             
             // Metode 1: Lewat Service Worker (Manifest V3 - Versi Baru)
             const workers = context.serviceWorkers();
@@ -113,6 +118,12 @@ function log(msg) {
         if (!metamaskPage) {
             log("[ERROR] MetaMask tidak dapat ditemukan sama sekali. Melewati Fase Autologin.");
         } else {
+            // Pastikan extensionId terisi jika tadi terlewat
+            if (!extensionId) {
+                extensionId = metamaskPage.url().split('/')[2];
+                log(`[SETUP] ID di-ekstrak dari URL: ${extensionId}`);
+            }
+
             log("[SETUP] Halaman MetaMask terdeteksi. Menjalankan Autologin...");
             
             // Paksa tunggu halaman React MetaMask selesai render
