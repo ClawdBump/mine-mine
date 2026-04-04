@@ -50,6 +50,18 @@ function log(msg) {
                 '--disable-blink-features=AutomationControlled'
             ]
         });
+        
+        // ==============================
+        // AGGRESSIVE POPUP LISTENER
+        // ==============================
+        const popupQueue = [];
+        context.on('page', (newPage) => {
+            const url = newPage.url() || "";
+            if (url.includes('chrome-extension://') && (url.includes('notification.html') || url.includes('popup.html'))) {
+                log(`[POPUP] Jendela MetaMask baru terdeteksi: ${url}`);
+                popupQueue.push(newPage);
+            }
+        });
 
         // ==============================
         // FASE 0: SETUP METAMASK
@@ -414,35 +426,45 @@ function log(msg) {
             
             let popupCount = 0;
             let noPopupStreak = 0;
-            const MAX_NO_POPUP_STREAK = 15; 
-            const handledPopups = new Set(); // Melacak popup yang sudah diproses
+            const MAX_NO_POPUP_STREAK = 20; 
+            const handledPopups = new Set();
 
             while (noPopupStreak < MAX_NO_POPUP_STREAK) {
-                const popup = context.pages().find(p => p.url().includes('notification.html') && !handledPopups.has(p));
+                // Ambil popup dari Queue prioritaskan, atau scan context.pages() sebagai fallback
+                let popup = popupQueue.shift() || context.pages().find(p => p.url().includes('notification.html') && !handledPopups.has(p));
                 
                 if (popup) {
                     noPopupStreak = 0;
+                    if (handledPopups.has(popup)) {
+                         // Lewati jika sudah pernah diproses di loop ini
+                         continue;
+                    }
+                    
                     popupCount++;
                     handledPopups.add(popup);
-                    log(`\n[4.${popupCount}] Mendeteksi Popup MetaMask (${popup.url()})...`);
+                    log(`\n[4.${popupCount}] Memproses Jendela MetaMask (${popup.url()})...`);
                     
                     try {
+                        // Tunggu render selesai
                         await popup.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
-                        await popup.bringToFront();
+                        await popup.bringToFront().catch(() => {});
                         
-                        // Cari tombol Connect/Next/Approve/Confirm/Sign
-                        const actionBtn = popup.locator('button:has-text("Connect"), button:has-text("Next"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Setuju")').first();
+                        // Cari tombol Connect/Next/Approve/Confirm/Sign/Sign-in
+                        const actionBtn = popup.locator('button:has-text("Connect"), button:has-text("Next"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Setuju")').first();
                         
-                        if (await actionBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
+                        if (await actionBtn.isVisible({ timeout: 12000 }).catch(() => false)) {
                             const btnText = await actionBtn.innerText().catch(() => "Aksi");
                             log(`  [4.${popupCount}] Klik: [${btnText}]`);
-                            await actionBtn.click();
                             
-                            // Tunggu proses selesai di dalam popup
-                            await popup.waitForTimeout(3000);
+                            // Pastikan fokus sebelum klik
+                            await actionBtn.focus().catch(() => {});
+                            await actionBtn.click({ force: true });
+                            
+                            // Beri waktu proses internal MetaMask
+                            await popup.waitForTimeout(3500);
                         }
                     } catch (pErr) {
-                        log(`  [4.x] Popup tertutup atau error: ${pErr.message}`);
+                        log(`  [4.x] Info: Jendela MetaMask tertutup/dipindahkan (${pErr.message})`);
                     }
                 } else {
                     noPopupStreak++;
