@@ -16,21 +16,29 @@ echo "Step 2: Mengekstrak ke folder metamask-extension..."
 rm -rf metamask-extension
 mkdir -p metamask-extension
 
-# Ekstrak file (ignore error header CRX karena unzip Linux biasanya bisa menangani)
-unzip -o metamask.zip -d metamask-extension > /dev/null 2>&1
+# Mencari offset tanda tangan ZIP (PK\x03\x04) untuk membuang header CRX
+OFFSET=$(grep -aobP "\x50\x4b\x03\x04" metamask.zip | head -n 1 | cut -d: -f1)
+
+if [ -z "$OFFSET" ]; then
+    echo "❌ Gagal menemukan data ZIP di dalam file CRX."
+    exit 1
+fi
+
+echo "Offset ditemukan di: $OFFSET. Memproses..."
+# Buat file zip murni tanpa header CRX
+dd if=metamask.zip of=metamask_clean.zip bs=1 skip=$OFFSET > /dev/null 2>&1
+
+# Ekstrak file zip murni
+unzip -o metamask_clean.zip -d metamask-extension > /dev/null 2>&1
 
 # Cek apakah berhasil
 if [ -f metamask-extension/manifest.json ]; then
     echo "✅ MetaMask berhasil diperbarui ke MV3!"
-    cat metamask-extension/manifest.json | grep '"version"' | head -n 1
+    VERSION=$(cat metamask-extension/manifest.json | grep '"version"' | head -n 1 | cut -d: -f2 | tr -d '", ')
+    echo "Versi terpasang: $VERSION"
 else
-    echo "❌ Ekstraksi gagal. Mencoba metode alternatif..."
-    # Jika unzip gagal, biasanya karena header CRX. Kita coba bersihkan foldernya.
-    rm -rf metamask-extension
-    mkdir -p metamask-extension
-    # Gunakan tool 'unzip' dengan paksa atau sarankan manual jika tetap gagal
-    echo "Harap pastikan 'unzip' terinstall (sudo apt install unzip)."
+    echo "❌ Ekstraksi gagal meskipun sudah membuang header."
 fi
 
 # Cleanup
-rm -f metamask.zip
+rm -f metamask.zip metamask_clean.zip
