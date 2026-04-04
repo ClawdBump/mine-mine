@@ -188,28 +188,31 @@ function log(msg) {
                 await metamaskPage.locator('button', { hasText: /Import my wallet/i }).click();
                 log("  [0.4] ✓ Password dibuat dan wallet di-import!");
 
-                // Tahap 5: Done — Tunggu tombol benar muncul sebelum klik
-                log("  [0.5] Menunggu layar konfirmasi akhir...");
-                await metamaskPage.waitForTimeout(4000);
-                
-                const doneBtn = metamaskPage.locator('button', { hasText: /Got it|Done/i }).first();
-                if (await doneBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                    await doneBtn.click();
-                    await metamaskPage.waitForTimeout(1000);
-                }
-
-                const nextBtn = metamaskPage.locator('button', { hasText: /Next/i }).first();
-                if (await nextBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-                    await nextBtn.click();
-                    await metamaskPage.waitForTimeout(1000);
-                }
-
-                const doneBtn2 = metamaskPage.locator('button', { hasText: /Done/i }).first();
-                if (await doneBtn2.isVisible({ timeout: 3000 }).catch(() => false)) {
-                    await doneBtn2.click();
-                }
-
                 log("  [0.5] ✓ Setup MetaMask Selesai!");
+
+                // ==============================
+                // CLEANUP: Tutup semua popup info di tab MetaMask
+                // ==============================
+                log("  [0.6] Membersihkan sisa notifikasi di tab MetaMask...");
+                for (let i = 0; i < 5; i++) {
+                    const infoBtn = metamaskPage.locator(
+                        'button:has-text("Got it"), ' +
+                        'button:has-text("Next"), ' +
+                        'button:has-text("Done"), ' +
+                        'button:has-text("Close"), ' +
+                        'button[aria-label="Close"]'
+                    ).first();
+                    
+                    if (await infoBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                        const txt = await infoBtn.innerText().catch(() => "Info");
+                        log(`  [0.6] Klik notifikasi: [${txt}]`);
+                        await infoBtn.click({ force: true });
+                        await metamaskPage.waitForTimeout(1000);
+                    } else {
+                        break; 
+                    }
+                }
+                log("  [0.6] ✓ Tab MetaMask Bersih.");
             } catch (innerErr) {
                 log(`  >> Error setup MetaMask: ${innerErr.message}`);
             }
@@ -356,6 +359,7 @@ function log(msg) {
                             'button:has-text("Connect"), ' +
                             'button:has-text("Approve"), ' +
                             'button:has-text("Switch network"), ' +
+                            'button:has-text("Switch"), ' + // Fallback untuk Base
                             'button:has-text("Sign")'
                         ).first();
 
