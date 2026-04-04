@@ -56,7 +56,7 @@ function log(msg) {
         // ==============================
         let metamaskPage = context.pages().find(p => p.url().includes('chrome-extension://'));
         if (!metamaskPage) {
-            metamaskPage = await context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
+            metamaskPage = await context.waitForEvent('page', { timeout: 60000 }).catch(() => null);
         }
         
         if (!metamaskPage || !metamaskPage.url().includes('chrome-extension://')) {
