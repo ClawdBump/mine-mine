@@ -54,15 +54,51 @@ function log(msg) {
         // ==============================
         // FASE 0: SETUP METAMASK
         // ==============================
-        let metamaskPage = context.pages().find(p => p.url().includes('chrome-extension://'));
-        if (!metamaskPage) {
-            metamaskPage = await context.waitForEvent('page', { timeout: 60000 }).catch(() => null);
-        }
+        log("[SETUP] Mendeteksi ekstensi MetaMask...");
         
+        // Cari halaman MetaMask yang sudah terbuka
+        let metamaskPage = context.pages().find(p => p.url().includes('chrome-extension://'));
+        
+        // Jika tidak ada tab MetaMask, coba tunggu sebentar
+        if (!metamaskPage) {
+            metamaskPage = await context.waitForEvent('page', { timeout: 10000 }).catch(() => null);
+        }
+
+        // Jika MASIH tidak ada tab MetaMask (umum terjadi di VPS), paksa buka secara manual
+        if (!metamaskPage) {
+            log("[SETUP] Tab MetaMask tidak muncul otomatis. Mencoba membuka paksa...");
+            
+            // Cari ID ekstensi dari background pages (Manifest V2)
+            let extensionId = "";
+            const bgPages = context.backgroundPages();
+            if (bgPages.length > 0) {
+                const url = bgPages[0].url();
+                extensionId = url.split('/')[2];
+            } else {
+                // Tunggu sebentar jika background page belum muncul
+                const bgPage = await context.waitForEvent('backgroundpage', { timeout: 10000 }).catch(() => null);
+                if (bgPage) extensionId = bgPage.url().split('/')[2];
+            }
+
+            if (extensionId) {
+                log(`[SETUP] ID Ekstensi ditemukan: ${extensionId}. Membuka onboarding...`);
+                metamaskPage = await context.newPage();
+                await metamaskPage.goto(`chrome-extension://${extensionId}/home.html#onboarding`);
+            } else {
+                log("[WARNING] Gagal mendapatkan ID Ekstensi MetaMask. Melewati setup.");
+            }
+        }
+
         if (!metamaskPage || !metamaskPage.url().includes('chrome-extension://')) {
-            log("[WARNING] Tab Setup MetaMask tidak ditemukan otomatis. Melewati Fase Autologin.");
+            log("[WARNING] Gagal mendeteksi halaman MetaMask. Menunggu 15 detik lagi...");
+            await context.waitForTimeout(15000);
+            metamaskPage = context.pages().find(p => p.url().includes('chrome-extension://'));
+        }
+
+        if (!metamaskPage) {
+            log("[ERROR] MetaMask tidak dapat ditemukan sama sekali. Melewati Fase Autologin.");
         } else {
-            log("[SETUP] Menjalankan Bot Cerdas (Mencari tombol dengan membaca teks)...");
+            log("[SETUP] Halaman MetaMask terdeteksi. Menjalankan Autologin...");
             
             // Paksa tunggu halaman React MetaMask selesai render
             await metamaskPage.waitForLoadState('domcontentloaded');
