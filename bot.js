@@ -234,29 +234,54 @@ function log(msg) {
                 await metamaskPage.waitForTimeout(3000);
 
                 try {
-                    const inputs = metamaskPage.locator('.networks-tab__content input, input');
-                    
-                    log("  [0.7] Mengisi formulir Jaringan Base...");
-                    await inputs.nth(0).fill('Base');
-                    await inputs.nth(1).fill('https://mainnet.base.org');
-                    await inputs.nth(2).fill('8453');
-                    await inputs.nth(3).fill('ETH');
-                    await inputs.nth(4).fill('https://basescan.org');
-                    
-                    await metamaskPage.waitForTimeout(1000);
-                    const saveBtn = metamaskPage.locator('button', { hasText: /Save/i });
-                    await saveBtn.click();
-                    log("  [0.7] ✓ Jaringan Base disimpan!");
+                    log("  [0.7] Mencari Base di daftar jaringan populer...");
+                    // Tunggu daftar muncul
+                    await metamaskPage.waitForSelector('button:has-text("Add")', { timeout: 10000 });
 
-                    // Tunggu tombol "Switch to Base" muncul (biasanya di banner)
-                    await metamaskPage.waitForTimeout(2000);
-                    const switchBtn = metamaskPage.locator('button', { hasText: /Switch to Base|Switch/i }).first();
-                    if (await switchBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                        await switchBtn.click();
-                        log("  [0.7] ✓ Berhasil berpindah ke jaringan Base!");
+                    // Cari baris yang berisi teks "Base" dan klik tombol "Add" di baris tersebut
+                    const baseRow = metamaskPage.locator('.networks-tab__item, .network-card', { hasText: /Base/i }).first();
+                    const addBtn = baseRow.locator('button:has-text("Add")');
+
+                    if (await addBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                        log("  [0.7] Klik 'Add' untuk Base...");
+                        await addBtn.click();
+                        await metamaskPage.waitForTimeout(2000);
+
+                        // Klik "Approve" di layar konfirmasi detail
+                        const approveBtn = metamaskPage.locator('button:has-text("Approve")').first();
+                        if (await approveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                            await approveBtn.click();
+                            log("  [0.7] ✓ Detail Jaringan Approve!");
+                        }
+
+                        // Klik "Switch to Base"
+                        await metamaskPage.waitForTimeout(2000);
+                        const switchBtn = metamaskPage.locator('button', { hasText: /Switch to Base|Switch/i }).first();
+                        if (await switchBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                            await switchBtn.click();
+                            log("  [0.7] ✓ Berhasil berpindah ke jaringan Base!");
+                        }
+                    } else {
+                        log("  [WARNING] Tombol 'Add' untuk Base tidak ditemukan di daftar populer. Mencoba cara manual...");
+                        // Fallback ke manual jika tidak ada di daftar populer
+                        const manualBtn = metamaskPage.locator('button:has-text("Add a network manually")');
+                        await manualBtn.click();
+                        await metamaskPage.waitForTimeout(2000);
+                        
+                        const inputs = metamaskPage.locator('input');
+                        await inputs.nth(0).fill('Base');
+                        await inputs.nth(1).fill('https://mainnet.base.org');
+                        await inputs.nth(2).fill('8453');
+                        await inputs.nth(3).fill('ETH');
+                        await inputs.nth(4).fill('https://basescan.org');
+                        
+                        await metamaskPage.locator('button:has-text("Save")').click();
+                        await metamaskPage.waitForTimeout(2000);
+                        const switchBtn2 = metamaskPage.locator('button', { hasText: /Switch to Base|Switch/i }).first();
+                        if (await switchBtn2.isVisible().catch(() => false)) await switchBtn2.click();
                     }
                 } catch (netErr) {
-                    log(`  [WARNING] Gagal setup jaringan manual: ${netErr.message}. Mencoba lanjut...`);
+                    log(`  [WARNING] Gagal setup jaringan: ${netErr.message}. Mencoba lanjut...`);
                 }
                 
                 await metamaskPage.waitForTimeout(2000);
