@@ -68,20 +68,35 @@ function log(msg) {
         if (!metamaskPage) {
             log("[SETUP] Tab MetaMask tidak muncul otomatis. Mencoba membuka paksa...");
             
-            // Cari ID ekstensi dari background pages (Manifest V2)
+            // Cari ID ekstensi secara dinamis
             let extensionId = "";
-            const bgPages = context.backgroundPages();
-            if (bgPages.length > 0) {
-                const url = bgPages[0].url();
+            
+            // Metode 1: Lewat Service Worker (Manifest V3 - Versi Baru)
+            const workers = context.serviceWorkers();
+            if (workers.length > 0) {
+                const url = workers[0].url();
                 extensionId = url.split('/')[2];
-            } else {
-                // Tunggu sebentar jika background page belum muncul
-                const bgPage = await context.waitForEvent('backgroundpage', { timeout: 10000 }).catch(() => null);
-                if (bgPage) extensionId = bgPage.url().split('/')[2];
+                log(`[SETUP] ID ditemukan via Service Worker: ${extensionId}`);
+            } 
+            
+            // Metode 2: Lewat Background Pages (Manifest V2 - Versi Lama)
+            if (!extensionId) {
+                const bgPages = context.backgroundPages();
+                if (bgPages.length > 0) {
+                    extensionId = bgPages[0].url().split('/')[2];
+                    log(`[SETUP] ID ditemukan via Background Page: ${extensionId}`);
+                }
+            }
+
+            // Metode 3: Tunggu sebentar jika belum terdeteksi (High Latency VPS)
+            if (!extensionId) {
+                log("[SETUP] Menunggu Service Worker aktif...");
+                const worker = await context.waitForEvent('serviceworker', { timeout: 15000 }).catch(() => null);
+                if (worker) extensionId = worker.url().split('/')[2];
             }
 
             if (extensionId) {
-                log(`[SETUP] ID Ekstensi ditemukan: ${extensionId}. Membuka onboarding...`);
+                log(`[SETUP] Membuka paksa onboarding MetaMask...`);
                 metamaskPage = await context.newPage();
                 await metamaskPage.goto(`chrome-extension://${extensionId}/home.html#onboarding`);
             } else {
