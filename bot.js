@@ -364,6 +364,35 @@ function log(msg) {
             
             log("[FASE 2] ✓ Mint Access berhasil diklik!");
 
+            // ==============================
+            // FASE 3: PILIH METAMASK DI WEBSITE
+            // ==============================
+            log("\n[FASE 3] Mencari dan memilih 'MetaMask' di website...");
+            await gamePage.waitForTimeout(3000); // Tunggu modal muncul
+
+            await waitForCondition(gamePage, async () => {
+                // Cari opsi "MetaMask" di website
+                const metaMaskOption = gamePage.locator('div, button, span').filter({ hasText: /^MetaMask$/i }).first();
+                
+                if (await metaMaskOption.isVisible({ timeout: 2000 }).catch(() => false)) {
+                    log("  [3.0] Tombol MetaMask ditemukan di website! Mengklik...");
+                    await metaMaskOption.click({ force: true });
+                    return true;
+                }
+                
+                // Fallback JS click
+                const clickedJS = await gamePage.evaluate(() => {
+                    const el = Array.from(document.querySelectorAll('div, button, span')).find(x => x.innerText.trim() === 'MetaMask');
+                    if (el) { el.click(); return true; }
+                    return false;
+                }).catch(() => false);
+                
+                return clickedJS;
+            }, { timeout: 45000, interval: 2500, label: 'opsi MetaMask di website' });
+
+            log("[FASE 3] ✓ MetaMask di website diklik. Menunggu popup koneksi...");
+            await gamePage.waitForTimeout(3000);
+
             // Bersihkan overlay agar tidak mengganggu fase selanjutnya
             await gamePage.evaluate(() => {
                 const screen = document.getElementById('burnEntryScreen');
