@@ -507,31 +507,27 @@ function log(msg) {
                     let target = null;
                     let minScore = Infinity;
 
-                    // Definisikan nilai kelangkaan (Semakin besar = semakin prioritas)
+                    // Definisikan nilai kelangkaan (Hanya fokus pada target user)
                     const rarityMap = {
-                        "SILVER": 15, 
-                        "GOLD": 30, 
-                        "DIAMOND": 60, 
-                        "EMERALD": 65, 
-                        "BAICRYSTAL": 90, 
-                        "VOIDORE": 100,
-                        "ARTIFACT_RELIC": 150, 
-                        "ARTIFACT_PRISM": 160, 
-                        "ARTIFACT_VOID_SHARD": 170
+                        "EMERALD": 50, 
+                        "BAICRYSTAL": 80, 
+                        "VOIDORE": 100
                     };
+
+                    const targetGems = ["EMERALD", "BAICRYSTAL", "VOIDORE"];
 
                     for (let y = py - radius; y <= py + radius; y++) {
                         for (let x = px - radius; x <= px + radius; x++) {
                             const tile = getTile(x, y);
                             const def = BLOCK_DEF[tile];
                             
-                            if (def && def.name && !["AIR", "CAVE", "DIRT", "STONE", "BEDROCK", "LAVA", "GRASS"].includes(def.name.toUpperCase())) {
+                            // MODIFIKASI: Hanya ambil target spesifik (Emerald, Baicrystal, Voidore)
+                            if (def && def.name && targetGems.includes(def.name.toUpperCase())) {
                                 const oreName = def.name.toUpperCase();
                                 const dx = x - px;
                                 const dy = y - py;
                                 const dist = Math.sqrt(dx * dx + dy * dy);
                                 
-                                // Ambil skor kelangkaan, default 0 untuk Coal/Iron/Copper
                                 const rarityScore = rarityMap[oreName] || 0;
                                 
                                 // Bonus kedalaman (masih dipertahankan agar bot cenderung ke bawah jika skor sama)
