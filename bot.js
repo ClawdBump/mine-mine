@@ -250,9 +250,9 @@ function log(msg) {
                         await metamaskPage.waitForLoadState('domcontentloaded');
                         await metamaskPage.waitForTimeout(3000);
 
-                        // 3. Cari Base di daftar jaringan populer
-                        log("  [0.7] Mencari 'Base Mainnet' di daftar...");
-                        const baseRow = metamaskPage.locator('.networks-tab__item, .network-card, .add-network__network-list-item', { hasText: 'Base Mainnet' }).filter({ has: metamaskPage.locator('h6') }).first();
+                        // 3. Cari Base di daftar jaringan populer menggunakan struktur HTML yang Anda berikan
+                        log("  [0.7] Mencari 'Base Mainnet' di daftar populer...");
+                        const baseRow = metamaskPage.locator('.add-network__list-of-networks', { hasText: 'Base Mainnet' }).first();
                         const addBtn = baseRow.locator('button.add-network__add-button, button:has-text("Add")').first();
 
                         if (await addBtn.isVisible({ timeout: 15000 }).catch(() => false)) {
