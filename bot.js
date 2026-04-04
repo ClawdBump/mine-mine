@@ -190,29 +190,44 @@ function log(msg) {
 
                 log("  [0.5] ✓ Setup MetaMask Selesai!");
 
-                // ==============================
-                // CLEANUP: Tutup semua popup info di tab MetaMask
-                // ==============================
-                log("  [0.6] Membersihkan sisa notifikasi di tab MetaMask...");
-                for (let i = 0; i < 5; i++) {
-                    const infoBtn = metamaskPage.locator(
-                        'button:has-text("Got it"), ' +
-                        'button:has-text("Next"), ' +
-                        'button:has-text("Done"), ' +
-                        'button:has-text("Close"), ' +
-                        'button[aria-label="Close"]'
-                    ).first();
-                    
-                    if (await infoBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                        const txt = await infoBtn.innerText().catch(() => "Info");
-                        log(`  [0.6] Klik notifikasi: [${txt}]`);
-                        await infoBtn.click({ force: true });
-                        await metamaskPage.waitForTimeout(1000);
-                    } else {
-                        break; 
-                    }
-                }
                 log("  [0.6] ✓ Tab MetaMask Bersih.");
+
+                // ==============================
+                // SETUP JARINGAN BASE (Manual)
+                // ==============================
+                log("\n[SETUP] Menambahkan Jaringan Base secara manual...");
+                await metamaskPage.goto(`chrome-extension://${extensionId}/home.html#settings/networks/add-network`);
+                await metamaskPage.waitForLoadState('domcontentloaded');
+                await metamaskPage.waitForTimeout(3000);
+
+                try {
+                    const inputs = metamaskPage.locator('.networks-tab__content input, input');
+                    
+                    log("  [0.7] Mengisi formulir Jaringan Base...");
+                    await inputs.nth(0).fill('Base');
+                    await inputs.nth(1).fill('https://mainnet.base.org');
+                    await inputs.nth(2).fill('8453');
+                    await inputs.nth(3).fill('ETH');
+                    await inputs.nth(4).fill('https://basescan.org');
+                    
+                    await metamaskPage.waitForTimeout(1000);
+                    const saveBtn = metamaskPage.locator('button', { hasText: /Save/i });
+                    await saveBtn.click();
+                    log("  [0.7] ✓ Jaringan Base disimpan!");
+
+                    // Tunggu tombol "Switch to Base" muncul (biasanya di banner)
+                    await metamaskPage.waitForTimeout(2000);
+                    const switchBtn = metamaskPage.locator('button', { hasText: /Switch to Base|Switch/i }).first();
+                    if (await switchBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                        await switchBtn.click();
+                        log("  [0.7] ✓ Berhasil berpindah ke jaringan Base!");
+                    }
+                } catch (netErr) {
+                    log(`  [WARNING] Gagal setup jaringan manual: ${netErr.message}. Mencoba lanjut...`);
+                }
+                
+                await metamaskPage.waitForTimeout(2000);
+                log("  [SETUP] Persiapan MetaMask Selesai. Membuka Game...");
             } catch (innerErr) {
                 log(`  >> Error setup MetaMask: ${innerErr.message}`);
             }
