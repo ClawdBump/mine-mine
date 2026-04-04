@@ -4,10 +4,14 @@ METAMASK_ID="nkbihfbeogaeaoehlefnkodbefgpgknn"
 URL="https://clients2.google.com/service/update2/crx?response=redirect&prodversion=120.0&x=id%3D${METAMASK_ID}%26installsource%3Dondemand%26uc"
 
 echo "Step 1: Mengunduh MetaMask Extension (Manifest V3)..."
-curl -L -o metamask.zip "$URL"
+# Gunakan User-Agent agar tidak diblokir Google
+USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+curl -L -A "$USER_AGENT" -o metamask.zip "$URL"
 
-if [ ! -f metamask.zip ]; then
-    echo "Gagal mengunduh file!"
+# Cek apakah file terunduh (minimal 5MB untuk MetaMask)
+FILE_SIZE=$(stat -c%s "metamask.zip" 2>/dev/null || echo 0)
+if [ "$FILE_SIZE" -lt 1000000 ]; then
+    echo "❌ Unduhan gagal atau file terlalu kecil ($FILE_SIZE bytes). Cek koneksi internet VPS Anda."
     exit 1
 fi
 
@@ -16,12 +20,13 @@ echo "Step 2: Mengekstrak ke folder metamask-extension..."
 rm -rf metamask-extension
 mkdir -p metamask-extension
 
-# Mencari offset tanda tangan ZIP (PK\x03\x04) untuk membuang header CRX
-OFFSET=$(grep -aobP "\x50\x4b\x03\x04" metamask.zip | head -n 1 | cut -d: -f1)
+# Mencari offset ZIP menggunakan Python3 (lebih akurat di berbagai versi Linux)
+OFFSET=$(python3 -c "import sys; f=open('metamask.zip','rb'); d=f.read(); print(d.find(b'\x50\x4b\x03\x04'))" 2>/dev/null)
 
-if [ -z "$OFFSET" ]; then
-    echo "❌ Gagal menemukan data ZIP di dalam file CRX."
-    exit 1
+if [ "$OFFSET" == "-1" ] || [ -z "$OFFSET" ]; then
+    echo "❌ Gagal menemukan data ZIP di dalam file CRX menggunakan Python."
+    # Fallback ke grep jika python gagal
+    OFFSET=$(grep -aobP "\x50\x4b\x03\x04" metamask.zip | head -n 1 | cut -d: -f1)
 fi
 
 echo "Offset ditemukan di: $OFFSET. Memproses..."
