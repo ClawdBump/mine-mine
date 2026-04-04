@@ -246,7 +246,7 @@ function log(msg) {
 
                     // 3. Cari Base di daftar jaringan populer
                     log("  [0.7] Mencari Base di daftar jaringan populer...");
-                    const baseRow = metamaskPage.locator('.networks-tab__item, .network-card, .add-network__network-list-item', { hasText: /Base/i }).first();
+                    const baseRow = metamaskPage.locator('.networks-tab__item, .network-card, .add-network__network-list-item', { hasText: 'Base Mainnet' }).filter({ has: metamaskPage.locator('h6') }).first();
                     const addBtn = baseRow.locator('button.add-network__add-button, button:has-text("Add")').first();
 
                     if (await addBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
