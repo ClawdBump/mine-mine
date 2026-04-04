@@ -231,56 +231,67 @@ function log(msg) {
                 log("\n[SETUP] Menambahkan Jaringan Base sesuai alur visual...");
                 
                 try {
-                    // 1. Klik opsi Ethereum Mainnet (Pojok kiri atas)
-                    log("  [0.6] Klik pemilih jaringan (Top-left)...");
-                    const networkSelector = metamaskPage.locator('[data-testid="network-display"], .network-display').first();
-                    await networkSelector.click();
-                    await metamaskPage.waitForTimeout(1500);
+                    // Cek dulu apakah Jaringan sudah Base
+                    const currentNet = metamaskPage.locator('[data-testid="network-display"], .network-display').first();
+                    const netName = await currentNet.innerText().catch(() => "");
+                    
+                    if (netName.includes("Base")) {
+                        log("  [0.7] ✅ Jaringan sudah Base Mainnet. Lanjut...");
+                    } else {
+                        // 1. Klik opsi Ethereum Mainnet (Pojok kiri atas)
+                        log("  [0.6] Klik pemilih jaringan (Top-left)...");
+                        await currentNet.click();
+                        await metamaskPage.waitForTimeout(1500);
 
-                    // 2. Klik button "Add network" (seperti yang Anda tunjukkan)
-                    log("  [0.6] Klik button 'Add network'...");
-                    const addNetworkBtn = metamaskPage.locator('button:has-text("Add network")').first();
-                    await addNetworkBtn.click();
-                    await metamaskPage.waitForLoadState('domcontentloaded');
-                    await metamaskPage.waitForTimeout(3000);
+                        // 2. Klik button "Add network" (seperti yang Anda tunjukkan)
+                        log("  [0.6] Klik button 'Add network'...");
+                        const addNetworkBtn = metamaskPage.locator('button:has-text("Add network")').first();
+                        await addNetworkBtn.click();
+                        await metamaskPage.waitForLoadState('domcontentloaded');
+                        await metamaskPage.waitForTimeout(3000);
 
-                    // 3. Cari Base di daftar jaringan populer
-                    log("  [0.7] Mencari Base di daftar jaringan populer...");
-                    const baseRow = metamaskPage.locator('.networks-tab__item, .network-card, .add-network__network-list-item', { hasText: 'Base Mainnet' }).filter({ has: metamaskPage.locator('h6') }).first();
-                    const addBtn = baseRow.locator('button.add-network__add-button, button:has-text("Add")').first();
+                        // 3. Cari Base di daftar jaringan populer
+                        log("  [0.7] Mencari 'Base Mainnet' di daftar...");
+                        const baseRow = metamaskPage.locator('.networks-tab__item, .network-card, .add-network__network-list-item', { hasText: 'Base Mainnet' }).filter({ has: metamaskPage.locator('h6') }).first();
+                        const addBtn = baseRow.locator('button.add-network__add-button, button:has-text("Add")').first();
 
-                    if (await addBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
-                        log("  [0.7] Klik 'Add' untuk Base...");
-                        await addBtn.click();
-                        await metamaskPage.waitForTimeout(2000);
+                        if (await addBtn.isVisible({ timeout: 15000 }).catch(() => false)) {
+                            log("  [0.7] Klik 'Add' untuk Base...");
+                            await addBtn.click();
+                            await metamaskPage.waitForTimeout(3000);
 
-                        // Klik "Approve" di layar konfirmasi detail
-                        const approveBtn = metamaskPage.locator('button:has-text("Approve")').first();
-                        if (await approveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                            await approveBtn.click();
-                            log("  [0.7] ✓ Detail Jaringan Approve!");
+                            // Tambahan: Tangani popup konfirmasi detail jaringan
+                            const approveBtn = metamaskPage.locator('button:has-text("Approve")').first();
+                            if (await approveBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
+                                await approveBtn.click();
+                                log("  [0.7] ✓ Detail Jaringan Approve!");
+                                await metamaskPage.waitForTimeout(2000);
+                            }
+
+                            // Klik "Switch to Base"
+                            const switchBtn = metamaskPage.locator('button', { hasText: /Switch to Base|Switch/i }).first();
+                            if (await switchBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
+                                await switchBtn.click();
+                                log("  [0.7] ✓ Klik tombol Switch!");
+                            }
+
+                            // VERIFIKASI AKHIR
+                            log("  [0.7] Memverifikasi jaringan aktif...");
+                            const finalNetwork = metamaskPage.locator('[data-testid="network-display"], .network-display', { hasText: /Base/i }).first();
+                            await finalNetwork.waitFor({ state: 'visible', timeout: 15000 });
+                            log("  [0.7] ✅ KONFIRMASI: Jaringan sekarang adalah Base Mainnet.");
+                        } else {
+                            throw new Error("Tombol 'Add' untuk Base Mainnet tidak ditemukan di daftar.");
                         }
-
-                        // Klik "Switch to Base"
-                        await metamaskPage.waitForTimeout(2000);
-                        const switchBtn = metamaskPage.locator('button', { hasText: /Switch to Base|Switch/i }).first();
-                        if (await switchBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                            await switchBtn.click();
-                            log("  [0.7] ✓ Klik tombol Switch!");
-                        }
-
-                        // VERIFIKASI: Pastikan network-display benar-benar menunjukkan "Base"
-                        log("  [0.7] Memverifikasi jaringan aktif...");
-                        const finalNetwork = metamaskPage.locator('[data-testid="network-display"], .network-display', { hasText: /Base/i }).first();
-                        await finalNetwork.waitFor({ state: 'visible', timeout: 10000 });
-                        log("  [0.7] ✅ KONFIRMASI: Jaringan sekarang adalah Base Mainnet.");
                     }
+                    
+                    await metamaskPage.waitForTimeout(2000);
+                    log("  [SETUP] Persiapan MetaMask Selesai. Membuka Game...");
                 } catch (netErr) {
-                    log(`  [WARNING] Gagal alur penambahan jaringan: ${netErr.message}`);
+                    log(`  [ERROR] Gagal memastikan jaringan Base: ${netErr.message}`);
+                    log("  [ERROR] Bot berhenti di sini agar tidak terjadi error koneksi di Game.");
+                    return; // Berhenti di sini, jangan lanjut ke pembukaan game
                 }
-                
-                await metamaskPage.waitForTimeout(3000);
-                log("  [SETUP] Persiapan MetaMask Selesai. Membuka Game...");
             } catch (innerErr) {
                 log(`  >> Error setup MetaMask: ${innerErr.message}`);
             }
