@@ -40,6 +40,7 @@ function log(msg) {
 
 // Variabel global untuk mereferensikan halaman game utama
 let mainGamePage = null;
+let isUserPaused = false; // Flag Pause dari terminal
 
 // ============================================================
 // GLOBAL MONITOR: Menangani PopUp MetaMask di Latar Belakang
@@ -228,7 +229,31 @@ async function triggerMetaMaskPopup(context) {
 }
 
 (async () => {
+    // ==== SETUP KEYBOARD LISTENER UNTUK PAUSE/RESUME ====
+    const readline = require('readline');
+    readline.emitKeypressEvents(process.stdin);
+    if (process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+    }
+    process.stdin.on('keypress', (str, key) => {
+        if (key.ctrl && key.name === 'c') {
+            process.exit();
+        } else if (key && key.name === 'p') {
+            isUserPaused = !isUserPaused;
+            if (isUserPaused) {
+                console.log("\n=============================================");
+                console.log("⏸️  BOT DI-PAUSE OLEH USER. Tekan 'P' lagi untuk Resume.");
+                console.log("=============================================\n");
+            } else {
+                console.log("\n=============================================");
+                console.log("▶️  BOT DI-RESUME. Melanjutkan mining...");
+                console.log("=============================================\n");
+            }
+        }
+    });
+
     log("Memulai bot dan MetaMask menggunakan Sistem AI Cerdas...");
+    log("TIPS: Tekan tombol 'P' kapan saja di terminal ini untuk Pause/Resume bot.");
     
     // DIAGNOSTIK STARTUP
     log(`[DIAGNOSTIK] File .env ditemukan: ${dotEnvExists ? 'Ya' : 'TIDAK'}`);
@@ -891,6 +916,18 @@ async function triggerMetaMaskPopup(context) {
             
             while (true) {
                 loopCount++;
+                
+                // ===== CEK STATUS PAUSE DARI USER =====
+                if (isUserPaused) {
+                    if (loopCount % 5 === 0) log("-> [PAUSE] Bot sedang manual pause (Tekan 'p' di terminal untuk lanjut)...");
+                    
+                    // Pastikan tombol dlepas saat pause
+                    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+                        await gamePage.keyboard.up(key).catch(() => {});
+                    }
+                    await gamePage.waitForTimeout(1000);
+                    continue;
+                }
                 
                 // ----- CEK 1: Apakah karakter mati? (Prioritas Tertinggi) -----
                 const isDead = await gamePage.evaluate(() => {
