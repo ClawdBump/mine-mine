@@ -45,6 +45,7 @@ let mainGamePage = null;
 // GLOBAL MONITOR: Menangani PopUp MetaMask di Latar Belakang
 // ============================================================
 let monitorEnabled = false; 
+let extensionId = ""; // Global
 const handledPopups = new Set();
 const popupQueue = [];
 
@@ -139,6 +140,19 @@ async function startMetaMaskMonitor(context) {
     }
 }
 
+// ==============================
+// TRIGGER: Paksa Buka Jendela Notifikasi MetaMask
+// ==============================
+async function triggerMetaMaskPopup(context) {
+    if (!extensionId) return;
+    log(`[SYSTEM] Mencoba membuka paksa notifikasi MetaMask: chrome-extension://${extensionId}/notification.html`);
+    const page = await context.newPage().catch(() => null);
+    if (page) {
+        await page.goto(`chrome-extension://${extensionId}/notification.html`).catch(() => {});
+        // Jendela ini akan ditangkap oleh Monitor Latar Belakang secara otomatis
+    }
+}
+
 (async () => {
     log("Memulai bot dan MetaMask menggunakan Sistem AI Cerdas...");
     
@@ -220,7 +234,7 @@ async function startMetaMaskMonitor(context) {
         
         // Cari halaman MetaMask yang sudah terbuka
         let metamaskPage = context.pages().find(p => p.url().includes('chrome-extension://'));
-        let extensionId = "";
+        // extensionId dikelola secara global sekarang
 
         if (metamaskPage) {
             extensionId = metamaskPage.url().split('/')[2];
@@ -567,6 +581,15 @@ async function startMetaMaskMonitor(context) {
 
             log("[3.0] ✓ MetaMask di website diklik. Menunggu popup koneksi...");
             await gamePage.waitForTimeout(5000); 
+
+            // TRIGGER FALLBACK: Jika popup tidak muncul dalam 15 detik, paksa buka
+            const checkPopup = async () => {
+                await gamePage.waitForTimeout(10000);
+                if (popupQueue.length === 0) {
+                    await triggerMetaMaskPopup(context);
+                }
+            };
+            checkPopup(); // Run in parallel
 
             // Bersihkan overlay (seperti layar pembuka) jika masih ada
             await gamePage.evaluate(() => {
