@@ -67,56 +67,68 @@ async function startMetaMaskMonitor(context) {
             handledPopups.add(popup);
             
             try {
-                // Tunggu render awal (Meningkatkan kesabaran hingga 60 detik di VPS)
-                await popup.waitForLoadState('load', { timeout: 60000 }).catch(() => {});
+                // Tunggu render awal
+                log(`  [POPUP] Membuka jendela: ${popup.url()}`);
+                await popup.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
                 await popup.bringToFront().catch(() => {});
-                
-                // TUNGGU DULU: Tunggu elemen internal MetaMask muncul secara alami
-                log("  [POPUP] Menunggu konten jendela muncul...");
-                const hasContent = await popup.locator('.app, #app-content, .main-container').isVisible({ timeout: 45000 }).catch(() => false);
-                
-                if (!hasContent && !popup.isClosed()) {
-                    log("  [POPUP] PERINGATAN: Konten belum muncul, tapi bot akan tetap mencoba mencari tombol aksi...");
-                }
+                await popup.waitForTimeout(3000);
 
                 // SUB-LOOP: Step-by-step di dalam jendela
                 let stepCount = 0;
-                while (!popup.isClosed() && stepCount < 8) {
+                while (!popup.isClosed() && stepCount < 12) {
                     stepCount++;
                     await popup.bringToFront().catch(() => {});
                     
-                    await popup.evaluate(() => {
+                    // Pastikan scroll ke bawah agar tombol terlihat (Fokus pada container utama MetaMask)
+                    await popup.evaluate(() => { 
                         window.scrollTo(0, document.body.scrollHeight);
+                        const scrollEl = document.querySelector('.request-signature__scroll, .signature-request-message--signable, .confirm-page-container-content');
+                        if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
                     }).catch(() => {});
+                    await popup.waitForTimeout(1000);
 
-                    const confirmBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Tanda Tangan"), button:has-text("Setuju"), button:has-text("Konfirmasi"), button:has-text("Permisi")').first();
+                    // 1. Cari tombol POSITIF (Connect, Sign, dll) - Tambah 'Allow' dan 'Got it'
+                    const confirmBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Tanda Tangan"), button:has-text("Setuju"), button:has-text("Konfirmasi"), button:has-text("Permisi"), button:has-text("Allow"), button:has-text("I understand"), button:has-text("Got it")').first();
                     
-                    if (await confirmBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
-                        const btnText = await confirmBtn.innerText().catch(() => "Confirm");
-                        log(`  [POPUP] Mencoba Konfirmasi: [${btnText}] (Step ${stepCount})`);
+                    log(`  [POPUP] Mencari tombol aksi (Percobaan ke-${stepCount})...`);
+                    if (await confirmBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                        const btnText = await confirmBtn.innerText().catch(() => "Aksi");
+                        log(`  [POPUP] >>> MENCOBA KLIK PAKSA: [${btnText}]`);
+                        
+                        // Tunggu sampai tombol benar-benar stabil & aktif
+                        await confirmBtn.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+                        
                         await confirmBtn.focus().catch(() => {});
-                        await confirmBtn.click({ force: true });
-                        await popup.waitForTimeout(4000); // Tunggu lebih lama antar tahap
-                    } else {
-                        const cancelBtn = popup.locator('button:has-text("Cancel"), button:has-text("Reject"), button:has-text("Reject all"), button:has-text("Tolak"), button:has-text("Batal"), button:has-text("Tutup")').first();
-                        if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                            const btnText = await cancelBtn.innerText().catch(() => "Batal");
-                            log(`  [POPUP] Konfirmasi Gagal. Memilih Batal: [${btnText}]`);
-                            await cancelBtn.focus().catch(() => {});
-                            await cancelBtn.click({ force: true });
-                            await popup.waitForTimeout(3000);
-                        } else {
-                            break; 
-                        }
+                        // Klik dengan opsi agresif agar tidak tertahan
+                        await confirmBtn.click({ force: true, noWaitAfter: true }).catch(e => log(`  [POPUP] Klik error: ${e.message}`));
+                        
+                        await popup.waitForTimeout(4000); 
+                        continue; 
+                    } 
+
+                    // 2. Jika tidak ada konfirmasi, cari tombol NEGATIF (Cancel, Reject, dll)
+                    const cancelBtn = popup.locator('button:has-text("Cancel"), button:has-text("Reject"), button:has-text("Reject all"), button:has-text("Tolak"), button:has-text("Batal"), button:has-text("Tutup"), button:has-text("Ignore")').first();
+                    if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                        const btnText = await cancelBtn.innerText().catch(() => "Batal");
+                        log(`  [POPUP] >>> KLIK BATAL: [${btnText}]`);
+                        await cancelBtn.focus().catch(() => {});
+                        await cancelBtn.click({ force: true, noWaitAfter: true }).catch(() => {});
+                        await popup.waitForTimeout(3000);
+                        continue;
                     }
+                    
+                    if (stepCount > 4) {
+                        log(`  [POPUP] Tidak ada tombol ditemukan. Menunggu sebentar...`);
+                    }
+                    await popup.waitForTimeout(2000);
                 }
-                log(`  [POPUP] Jendela selesai. Kembali ke GemMiner...`);
-                // KEMBALIKAN FOKUS KE TAB UTAMA GAME
+                
+                log(`  [POPUP] Selesai. Kembali ke Game.`);
                 if (mainGamePage) {
                     await mainGamePage.bringToFront().catch(() => {});
                 }
             } catch (err) {
-                log(`  [POPUP] Selesai/Tertutup.`);
+                log(`  [POPUP] Error: ${err.message}`);
             }
             
             // JEDA AMAN SEBELUM PROSES POPUP BERIKUTNYA
