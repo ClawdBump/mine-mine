@@ -690,34 +690,45 @@ async function triggerMetaMaskPopup(context) {
             }).catch(() => {});
             
             // ==============================
-            // FASE 4: HANDLING POPUP & CAPTCHA
+            // FASE 4: HANDLING POPUP & MANUAL INTERVENTION
             // ==============================
             log("\n[FASE 4] Menunggu koneksi wallet...");
             
-            // Tunggu 10 detik agar koneksi benar-benar selesai di server
-            await gamePage.waitForTimeout(10000);
+            // Tunggu 5 detik agar koneksi selesai di server
+            await gamePage.waitForTimeout(5000);
             
-            // JALANKAN AUTO-CAPTCHA (Centang "Verify")
+            // Coba klik captcha otomatis dulu
             await handleCaptcha(gamePage);
+            
+            // PERIKSA apakah game sudah langsung lanjut
+            const langReady = await gamePage.locator('div.lang-card').isVisible({ timeout: 5000 }).catch(() => false);
+            
+            if (!langReady) {
+                // Game belum lanjut - beri tahu user untuk intervensi manual
+                log("\n============================================================");
+                log("⚠  PERHATIAN: BUKA NOVNC SEKARANG!");
+                log("   Game membutuhkan interaksi manual (captcha / verifikasi).");
+                log("   Selesaikan apa pun yang tampil di layar browser.");
+                log("   Bot akan otomatis melanjutkan setelah selesai.");
+                log("   Waktu tunggu: 5 menit.");
+                log("============================================================\n");
+                
+                // Pastikan tab game ada di depan layar
+                await gamePage.bringToFront().catch(() => {});
+            }
 
-            // Tunggu hingga game masuk ke pemilihan bahasa (Tunggu lebih lama: 120 detik)
-            log("[FASE 4] Menunggu menu bahasa muncul (English)...");
+            // Tunggu hingga game masuk ke pemilihan bahasa (Maks 5 menit)
+            log("[FASE 4] Menunggu menu bahasa muncul...");
             const langMenu = await waitForCondition(gamePage, async () => {
-                const langReady = await gamePage.locator('div.lang-card').isVisible({ timeout: 2000 }).catch(() => false);
-                if (!langReady) {
-                    // Cek lagi captcha kali saja baru muncul setelah delay
-                    await handleCaptcha(gamePage);
-                }
-                return langReady;
-            }, { timeout: 120000, interval: 5000, label: 'menu bahasa (Koneksi Berhasil)' }).catch(() => null);
+                await gamePage.bringToFront().catch(() => {});
+                return await gamePage.locator('div.lang-card').isVisible({ timeout: 2000 }).catch(() => false);
+            }, { timeout: 300000, interval: 5000, label: 'menu bahasa (Koneksi Berhasil)' }).catch(() => null);
 
             if (!langMenu) {
                 log("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                log("PERINGATAN: MENU BAHASA TIDAK MUNCUL!");
-                log("Kemungkinan CAPTCHA tertahan atau butuh solving manual di noVNC.");
-                log("Halaman saat ini akan dibiarkan menyala agar Anda bisa memperbaikinya.");
-                log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-                // Stay alive loop (sudah ada di catch global, tapi di sini biar lebih jelas)
+                log("TIMEOUT: Menu bahasa tidak muncul setelah 5 menit.");
+                log("Browser dibiarkan menyala. Periksa noVNC secara manual.");
+                log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
                 await new Promise(() => {});
             }
             
