@@ -68,8 +68,10 @@ async function startMetaMaskMonitor(context) {
                 await popup.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
                 await popup.bringToFront().catch(() => {});
                 
-                // FORCE RENDER: Di VPS 16GB, kita bisa paksa resize sedikit untuk trigger rendering X11
-                await popup.setViewportSize({ width: 360, height: 600 }).catch(() => {});
+                // FORCE RENDER: Hanya resize jika ini adalah popup kecil (notification.html)
+                if (popup.url().includes('notification.html')) {
+                    await popup.setViewportSize({ width: 360, height: 600 }).catch(() => {});
+                }
                 await popup.waitForTimeout(2000);
                 
                 // SELF-HEALING: Jika jendela putih/blank (tidak ada konten app)
