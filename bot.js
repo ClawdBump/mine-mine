@@ -38,6 +38,9 @@ function log(msg) {
     console.log(`[${ts}] ${msg}`);
 }
 
+// Variabel global untuk mereferensikan halaman game utama
+let mainGamePage = null;
+
 // ============================================================
 // GLOBAL MONITOR: Menangani PopUp MetaMask di Latar Belakang
 // ============================================================
@@ -54,7 +57,7 @@ async function startMetaMaskMonitor(context) {
             continue;
         }
 
-        // Ambil dari Queue (Event-driven) atau Scan (Fallback)
+        // Ambil dari Queue (Event-driven) atau Scan (Fallback) - SATU PER SATU
         let popup = popupQueue.shift() || context.pages().find(p => p.url().includes('chrome-extension://') && !handledPopups.has(p));
         
         if (popup) {
@@ -64,76 +67,60 @@ async function startMetaMaskMonitor(context) {
             handledPopups.add(popup);
             
             try {
-                // Tunggu render awal (Meningkatkan timeout untuk inisialisasi di VPS)
-                await popup.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
+                // Tunggu render awal (Meningkatkan kesabaran hingga 60 detik di VPS)
+                await popup.waitForLoadState('load', { timeout: 60000 }).catch(() => {});
                 await popup.bringToFront().catch(() => {});
                 
-                // FORCE RENDER: Hanya resize jika ini adalah popup kecil (notification.html)
-                if (popup.url().includes('notification.html')) {
-                    await popup.setViewportSize({ width: 360, height: 600 }).catch(() => {});
-                }
-                await popup.waitForTimeout(2000);
+                // TUNGGU DULU: Tunggu elemen internal MetaMask muncul secara alami
+                log("  [POPUP] Menunggu konten jendela muncul...");
+                const hasContent = await popup.locator('.app, #app-content, .main-container').isVisible({ timeout: 45000 }).catch(() => false);
                 
-                // SELF-HEALING: Jika jendela putih/blank (tidak ada konten app)
-                let checkCount = 0;
-                let hasContent = false;
-                while (checkCount < 3 && !hasContent) {
-                    checkCount++;
-                    hasContent = await popup.locator('.app, #app-content, .main-container').isVisible({ timeout: 10000 }).catch(() => false);
-                    if (!hasContent) {
-                        log(`  [POPUP] Jendela putih/macet (Percobaan ${checkCount}). Reloading...`);
-                        await popup.reload().catch(() => {});
-                        await popup.waitForTimeout(5000);
-                    }
+                if (!hasContent && !popup.isClosed()) {
+                    log("  [POPUP] PERINGATAN: Konten belum muncul, tapi bot akan tetap mencoba mencari tombol aksi...");
                 }
 
-                if (!hasContent) {
-                    log("  [POPUP] Gagal memuat konten setelah 3x reload. Menutup jendela untuk reset...");
-                    await popup.close().catch(() => {});
-                    return;
-                }
-
-                // SUB-LOOP: Tangani multi-step di dalam SATU jendela popup
+                // SUB-LOOP: Step-by-step di dalam jendela
                 let stepCount = 0;
                 while (!popup.isClosed() && stepCount < 8) {
                     stepCount++;
-                        await popup.bringToFront().catch(() => {});
-                        
-                        // Auto-Scroll untuk Signature mendalam
-                        await popup.evaluate(() => {
-                            window.scrollTo(0, document.body.scrollHeight);
-                            const scrollers = document.querySelectorAll('.signature-request-message--signable, .request-signature__scroll, .confirm-page-container-content');
-                            scrollers.forEach(s => s.scrollTop = s.scrollHeight);
-                        }).catch(() => {});
+                    await popup.bringToFront().catch(() => {});
+                    
+                    await popup.evaluate(() => {
+                        window.scrollTo(0, document.body.scrollHeight);
+                    }).catch(() => {});
 
-                        // Tombol POSITIF (Connect, Sign, dll)
-                        const confirmBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Tanda Tangan"), button:has-text("Setuju"), button:has-text("Konfirmasi"), button:has-text("Permisi")').first();
-                        
-                        // Cek tombol konfirmasi dulu (Tunggu lebih lama: 10 detik total per jendela)
-                        if (await confirmBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
-                            const btnText = await confirmBtn.innerText().catch(() => "Confirm");
-                            log(`  [POPUP] Mencoba Konfirmasi: [${btnText}] (Step ${stepCount})`);
-                            await confirmBtn.focus().catch(() => {});
-                            await confirmBtn.click({ force: true });
+                    const confirmBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Tanda Tangan"), button:has-text("Setuju"), button:has-text("Konfirmasi"), button:has-text("Permisi")').first();
+                    
+                    if (await confirmBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
+                        const btnText = await confirmBtn.innerText().catch(() => "Confirm");
+                        log(`  [POPUP] Mencoba Konfirmasi: [${btnText}] (Step ${stepCount})`);
+                        await confirmBtn.focus().catch(() => {});
+                        await confirmBtn.click({ force: true });
+                        await popup.waitForTimeout(4000); // Tunggu lebih lama antar tahap
+                    } else {
+                        const cancelBtn = popup.locator('button:has-text("Cancel"), button:has-text("Reject"), button:has-text("Reject all"), button:has-text("Tolak"), button:has-text("Batal"), button:has-text("Tutup")').first();
+                        if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                            const btnText = await cancelBtn.innerText().catch(() => "Batal");
+                            log(`  [POPUP] Konfirmasi Gagal. Memilih Batal: [${btnText}]`);
+                            await cancelBtn.focus().catch(() => {});
+                            await cancelBtn.click({ force: true });
                             await popup.waitForTimeout(3000);
                         } else {
-                            // Jika sesudah menunggu 10 detik tetap tidak ada tombol Konfirmasi, baru pilih Cancel/Reject
-                            const cancelBtn = popup.locator('button:has-text("Cancel"), button:has-text("Reject"), button:has-text("Reject all"), button:has-text("Tolak"), button:has-text("Batal"), button:has-text("Tutup")').first();
-                            
-                            if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                                const btnText = await cancelBtn.innerText().catch(() => "Batal");
-                                log(`  [POPUP] Konfirmasi Gagal/Tidak Ada. Memilih Batal: [${btnText}]`);
-                                await cancelBtn.focus().catch(() => {});
-                                await cancelBtn.click({ force: true });
-                                await popup.waitForTimeout(3000);
-                            } else {
-                                break; 
-                            }
+                            break; 
                         }
                     }
+                }
+                log(`  [POPUP] Jendela selesai. Kembali ke GemMiner...`);
+                // KEMBALIKAN FOKUS KE TAB UTAMA GAME
+                if (mainGamePage) {
+                    await mainGamePage.bringToFront().catch(() => {});
+                }
             } catch (err) {
-                log(`  [POPUP] Info: Jendela selesai/tertutup.`);
+                log(`  [POPUP] Selesai/Tertutup.`);
             }
+            
+            // JEDA AMAN SEBELUM PROSES POPUP BERIKUTNYA
+            await new Promise(resolve => setTimeout(resolve, 3000));
         }
         
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -469,6 +456,7 @@ async function startMetaMaskMonitor(context) {
         // ==============================
         log("\n[FASE 1] Memuat https://www.gemminer.app/ ...");
         const gamePage = await context.newPage();
+        mainGamePage = gamePage; // Set referensi global untuk monitor
         await gamePage.goto('https://www.gemminer.app/');
         await gamePage.waitForLoadState('networkidle');
         log("[FASE 1] ✓ Halaman game selesai dimuat (networkidle).");
