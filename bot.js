@@ -559,13 +559,6 @@ async function triggerMetaMaskPopup(context) {
             // ==============================
             log("\n[FASE 3] Mencari dan memilih 'MetaMask' di website...");
             
-            // Pembersihan awal: Jika ada popup MetaMask yang muncul otomatis, tutup dulu agar tidak bentrok
-            const strayPopups = context.pages().filter(p => p.url().includes('notification.html'));
-            for (const p of strayPopups) {
-                log("  [3.x] Menutup popup otomatis yang menghalangi...");
-                await p.close().catch(() => {});
-            }
-
             await gamePage.waitForTimeout(4000); // Tunggu modal muncul
 
             await waitForCondition(gamePage, async () => {
