@@ -972,11 +972,11 @@ async function triggerMetaMaskPopup(context) {
                     let target = null;
                     let minScore = Infinity;
 
-                    // Definisikan nilai kelangkaan (Hanya fokus pada target user)
+                    // Definisikan nilai kelangkaan — BAICRYSTAL & VOIDORE sangat diprioritaskan
                     const rarityMap = {
-                        "EMERALD": 50, 
-                        "BAICRYSTAL": 80, 
-                        "VOIDORE": 100
+                        "EMERALD": 50,       // Fallback saja
+                        "BAICRYSTAL": 250,   // ⭐⭐ Prioritas Tinggi
+                        "VOIDORE": 300       // ⭐⭐⭐ Prioritas Tertinggi
                     };
 
                     const targetGems = ["EMERALD", "BAICRYSTAL", "VOIDORE"];
