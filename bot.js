@@ -165,6 +165,9 @@ async function handleCaptcha(page) {
     try {
         log("[CAPTCHA] Memeriksa apakah ada tantangan Verify...");
         
+        // Beri waktu sejenak agar iframe muncul di VPS
+        await page.waitForTimeout(3000);
+
         // 1. Deteksi Cloudflare Turnstile (Sering dipakai gemminer)
         const turnstileFrame = page.frames().find(f => f.url().includes('turnstile') || f.url().includes('challenges.cloudflare.com'));
         if (turnstileFrame) {
@@ -272,6 +275,8 @@ async function triggerMetaMaskPopup(context) {
         const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
             headless: false,
             viewport: { width: 1366, height: 768 },
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+            ignoreDefaultArgs: ['--enable-automation'],
             args: [
                 `--disable-extensions-except=${METAMASK_PATH}`,
                 `--load-extension=${METAMASK_PATH}`,
@@ -280,8 +285,19 @@ async function triggerMetaMaskPopup(context) {
                 '--disable-setuid-sandbox',
                 '--disable-gpu',
                 '--disable-dev-shm-usage',
-                '--disable-software-rasterizer'
+                '--disable-software-rasterizer',
+                '--disable-infobars',
+                '--window-position=0,0'
             ]
+        });
+
+        // ==============================
+        // STEALTH: Sembunyikan jejak bot
+        // ==============================
+        await context.addInitScript(() => {
+            // Hapus properti webdriver (tidak ganggu MetaMask)
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            // JANGAN override window.chrome - MetaMask butuh chrome.runtime untuk berfungsi
         });
         
         // ==============================
