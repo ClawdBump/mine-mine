@@ -6,7 +6,8 @@ sleep 2
 export DISPLAY=:99
 
 # 3. Menyalakan x11vnc (VNC Server) di background (Tanpa password)
-x11vnc -display :99 -forever -nopw -noxdamage -rfbport 5900 &
+# Menambahkan -ncache 10 dan -ncache_cr untuk performa lebih mulus sesuai saran
+x11vnc -display :99 -forever -nopw -noxdamage -rfbport 5900 -ncache 10 -ncache_cr &
 sleep 2
 
 # 4. Menyalakan websockify (noVNC Bridge) untuk akses browser
