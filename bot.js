@@ -767,11 +767,28 @@ async function triggerMetaMaskPopup(context) {
             }
 
             // Tunggu hingga game masuk ke pemilihan bahasa (Maks 5 menit)
+            // Gunakan JavaScript langsung karena isVisible() kadang tidak akurat
             log("[FASE 4] Menunggu menu bahasa muncul...");
             const langMenu = await waitForCondition(gamePage, async () => {
-                await gamePage.bringToFront().catch(() => {});
-                return await gamePage.locator('div.lang-card').isVisible({ timeout: 2000 }).catch(() => false);
-            }, { timeout: 300000, interval: 5000, label: 'menu bahasa (Koneksi Berhasil)' }).catch(() => null);
+                const clicked = await gamePage.evaluate(() => {
+                    // Cara 1: Langsung panggil fungsi chooseLang jika tersedia
+                    if (typeof chooseLang === 'function') {
+                        chooseLang('en');
+                        return true;
+                    }
+                    // Cara 2: Klik elemen lang-card yang ada teks ENGLISH
+                    const cards = document.querySelectorAll('.lang-card');
+                    for (const card of cards) {
+                        if (card.innerText && card.innerText.includes('ENGLISH')) {
+                            card.click();
+                            return true;
+                        }
+                    }
+                    // Cara 3: Cek apakah elemen ada di DOM (meski tersembunyi)
+                    return document.querySelector('.lang-card') !== null;
+                }).catch(() => false);
+                return clicked;
+            }, { timeout: 300000, interval: 3000, label: 'menu bahasa (Koneksi Berhasil)' }).catch(() => null);
 
             if (!langMenu) {
                 log("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
