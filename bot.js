@@ -274,7 +274,7 @@ async function triggerMetaMaskPopup(context) {
     try {
         const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
             headless: false,
-            viewport: { width: 1366, height: 768 },
+            viewport: { width: 1366, height: 1024 },
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
             ignoreDefaultArgs: ['--enable-automation'],
             args: [
@@ -960,6 +960,21 @@ async function triggerMetaMaskPopup(context) {
                     } catch (e) { /* popup tertutup sendiri */ }
                     await gamePage.waitForTimeout(1000);
                     continue;
+                }
+
+                // ----- CEK 4: Apakah ada Captcha (Cash Out atau interupsi lainnya)? -----
+                const hasCaptchaText = await gamePage.evaluate(() => {
+                    const btn = Array.from(document.querySelectorAll('div, button, span')).find(el => el.innerText && el.innerText.trim().match(/^(Verify|Verify me|I am not a robot)$/i) && el.offsetParent !== null);
+                    return btn !== undefined;
+                }).catch(() => false);
+                
+                const hasCaptchaFrame = gamePage.frames().some(f => f.url().includes('turnstile') || f.url().includes('challenges.cloudflare.com') || f.url().includes('api2/anchor') || f.url().includes('recaptcha'));
+
+                if (hasCaptchaText || hasCaptchaFrame) {
+                    log("-> [CAPTCHA] Captcha terdeteksi selama gameplay! Menangani otomatis...");
+                    await handleCaptcha(gamePage);
+                    await gamePage.waitForTimeout(2000);
+                    // Kita tidak continue agar setelah ditangani bot bisa langsung jalan lagi
                 }
 
                 // ----- OPERASI UTAMA: RADAR & NAVIGASI -----
