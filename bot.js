@@ -274,7 +274,7 @@ async function triggerMetaMaskPopup(context) {
     try {
         const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
             headless: false,
-            viewport: { width: 1366, height: 1024 },
+            viewport: { width: 1366, height: 900 },
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
             ignoreDefaultArgs: ['--enable-automation'],
             args: [
@@ -963,6 +963,8 @@ async function triggerMetaMaskPopup(context) {
                 }
 
                 // ----- CEK 4: Apakah ada Captcha (Cash Out atau interupsi lainnya)? -----
+                // DIMATIKAN SESUAI PERMINTAAN
+                /*
                 const hasCaptchaText = await gamePage.evaluate(() => {
                     const btn = Array.from(document.querySelectorAll('div, button, span')).find(el => el.innerText && el.innerText.trim().match(/^(Verify|Verify me|I am not a robot)$/i) && el.offsetParent !== null);
                     return btn !== undefined;
@@ -976,6 +978,7 @@ async function triggerMetaMaskPopup(context) {
                     await gamePage.waitForTimeout(2000);
                     // Kita tidak continue agar setelah ditangani bot bisa langsung jalan lagi
                 }
+                */
 
                 // ----- OPERASI UTAMA: RADAR & NAVIGASI -----
                 const radar = await gamePage.evaluate(() => {
