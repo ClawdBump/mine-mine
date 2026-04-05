@@ -98,8 +98,9 @@ function log(msg) {
         const popupQueue = [];
         context.on('page', (newPage) => {
             const url = newPage.url() || "";
-            if (url.includes('chrome-extension://') && (url.includes('notification.html') || url.includes('popup.html'))) {
-                log(`[POPUP] Jendela MetaMask baru terdeteksi: ${url}`);
+            // Tangkap SEMUA halaman ekstensi (kecuali setup awal jika sudah terdeteksi)
+            if (url.includes('chrome-extension://')) {
+                log(`[POPUP/TAB] Jendela MetaMask baru terdeteksi: ${url}`);
                 popupQueue.push(newPage);
             }
         });
@@ -471,32 +472,34 @@ function log(msg) {
             const handledPopups = new Set();
 
             while (noPopupStreak < MAX_NO_POPUP_STREAK) {
-                // Ambil popup dari Queue prioritaskan, atau scan context.pages() sebagai fallback
-                let popup = popupQueue.shift() || context.pages().find(p => p.url().includes('notification.html') && !handledPopups.has(p));
+                // Scan Queue prioritaskan, atau scan context.pages() sebagai fallback
+                let popup = popupQueue.shift() || context.pages().find(p => p.url().includes('chrome-extension://') && !handledPopups.has(p));
                 
                 if (popup) {
                     noPopupStreak = 0;
-                    if (handledPopups.has(popup)) {
-                         // Lewati jika sudah pernah diproses di loop ini
-                         continue;
-                    }
+                    if (handledPopups.has(popup)) continue;
                     
                     popupCount++;
                     handledPopups.add(popup);
                     log(`\n[4.${popupCount}] Memproses Jendela MetaMask (${popup.url()})...`);
                     
                     try {
-                        // Tunggu render awal
                         await popup.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
                         
-                        // SUB-LOOP: Tangani multi-step di dalam SATU jendela popup (misal: Next -> Connect)
                         let stepCount = 0;
-                        while (!popup.isClosed() && stepCount < 5) {
+                        while (!popup.isClosed() && stepCount < 6) {
                             stepCount++;
                             await popup.bringToFront().catch(() => {});
                             
-                            // Cari tombol aksi: Next, Connect, Approve, Confirm, Sign, Sign-in
-                            const actionBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Setuju")').first();
+                            // SCROLL: Terkadang tombol Signature/Sign tersembunyi di bawah
+                            await popup.evaluate(() => {
+                                window.scrollTo(0, document.body.scrollHeight);
+                                const container = document.querySelector('.signature-request-message--signable, .request-signature__scroll');
+                                if (container) container.scrollTop = container.scrollHeight;
+                            }).catch(() => {});
+
+                            // Cari tombol aksi: Next, Connect, Approve, Confirm, Sign, Sign-in, Tanda Tangan, Setuju
+                            const actionBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Tanda Tangan"), button:has-text("Setuju"), button:has-text("Konfirmasi")').first();
                             
                             if (await actionBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
                                 const btnText = await actionBtn.innerText().catch(() => "Aksi");
@@ -505,16 +508,14 @@ function log(msg) {
                                 await actionBtn.focus().catch(() => {});
                                 await actionBtn.click({ force: true });
                                 
-                                // Tunggu sebentar agar UI MetaMask terupdate ke langkah berikutnya
-                                await popup.waitForTimeout(2000);
+                                await popup.waitForTimeout(2500);
                             } else {
-                                // Tidak ada lagi tombol yang bisa diklik di jendela ini
                                 break; 
                             }
                         }
-                        log(`  [4.${popupCount}] Selesai memproses jendela ini.`);
+                        log(`  [4.${popupCount}] Selesai.`);
                     } catch (pErr) {
-                        log(`  [4.x] Info: Jendela MetaMask ditutup atau selesai.`);
+                        log(`  [4.x] Info: Jendela MetaMask ditutup.`);
                     }
                 } else {
                     noPopupStreak++;
