@@ -62,6 +62,11 @@ async function startMetaMaskMonitor(context) {
         let popup = popupQueue.shift() || context.pages().find(p => p.url().includes('chrome-extension://') && !p.url().includes('home.html') && !handledPopups.has(p));
         
         if (popup) {
+            // JANGAN PERNAH PROSES ATAU TUTUP TAB UTAMA GAME
+            if (mainGamePage && popup === mainGamePage) {
+                popupQueue.shift(); // Buang dari antrean jika salah masuk
+                continue;
+            }
             if (handledPopups.has(popup)) continue;
             
             log(`\n[POPUP] Memproses Jendela MetaMask (${popup.url()})...`);
@@ -78,6 +83,9 @@ async function startMetaMaskMonitor(context) {
                 let stepCount = 0;
                 while (!popup.isClosed() && stepCount < 12) {
                     stepCount++;
+                    // Proteksi ekstra: pastikan bukan tab game
+                    if (popup === mainGamePage) break;
+                    
                     await popup.bringToFront().catch(() => {});
                     
                     // Pastikan scroll ke bawah agar tombol terlihat (Fokus pada container utama MetaMask)
@@ -125,7 +133,7 @@ async function startMetaMaskMonitor(context) {
                 }
                 
                 log(`  [POPUP] Selesai. Kembali ke Game.`);
-                if (mainGamePage) {
+                if (mainGamePage && !mainGamePage.isClosed()) {
                     await mainGamePage.bringToFront().catch(() => {});
                 }
             } catch (err) {
