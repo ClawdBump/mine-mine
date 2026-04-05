@@ -1,9 +1,14 @@
 const path = require('path');
 const { chromium } = require('playwright');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const METAMASK_PATH = path.join(__dirname, 'metamask-extension').replace(/\\/g, '/');
 const USER_DATA_DIR = path.join(__dirname, 'chrome_data').replace(/\\/g, '/');
+
+// DIAGNOSTIK: Cek apakah .env terbaca
+const fs = require('fs');
+const dotEnvPath = path.join(__dirname, '.env');
+const dotEnvExists = fs.existsSync(dotEnvPath);
 
 const SEED_PHRASE = process.env.SECRET_SEED_PHRASE;
 const PASSWORD = 'BotPassword123!';
@@ -34,12 +39,48 @@ function log(msg) {
 }
 
 (async () => {
-    if (!SEED_PHRASE || SEED_PHRASE.length < 20) {
-        console.error("ERROR: Harap isi variabel SECRET_SEED_PHRASE di Dashboard Railway Anda!");
-        process.exit(1);
+    log("Memulai bot dan MetaMask menggunakan Sistem AI Cerdas...");
+    
+    // DIAGNOSTIK STARTUP
+    log(`[DIAGNOSTIK] File .env ditemukan: ${dotEnvExists ? 'Ya' : 'TIDAK'}`);
+    if (dotEnvExists) {
+        log(`[DIAGNOSTIK] Path: ${dotEnvPath}`);
+        
+        // Cek semua key yang ada di process.env (untuk mendeteksi typo)
+        const keys = Object.keys(process.env).filter(k => k.includes('SEED') || k.includes('PHRASE') || k.includes('SECRET'));
+        if (keys.length > 0) {
+            log(`[DIAGNOSTIK] Variabel terkait ditemukan: [${keys.join(', ')}]`);
+        } else {
+            log(`[DIAGNOSTIK] PERINGATAN: Tidak ada variabel mengandung 'SEED' atau 'PHRASE' di process.env!`);
+        }
+    }
+    
+    // Fuzzy matching: Jika SECRET_SEED_PHRASE tidak ada, coba cari yang mirip
+    let effectiveSeedPhrase = SEED_PHRASE;
+    if (!effectiveSeedPhrase) {
+        const potentialKey = Object.keys(process.env).find(k => k.toUpperCase().includes('SEED') && k.toUpperCase().includes('PHRASE'));
+        if (potentialKey) {
+            log(`[DIAGNOSTIK] Menggunakan fallback dari key: ${potentialKey}`);
+            effectiveSeedPhrase = process.env[potentialKey];
+        }
     }
 
-    log("Memulai bot dan MetaMask menggunakan Sistem AI Cerdas...");
+    if (!effectiveSeedPhrase || effectiveSeedPhrase.trim().length < 20) {
+        const words = effectiveSeedPhrase ? effectiveSeedPhrase.trim().split(/\s+/).length : 0;
+        log(`[DIAGNOSTIK] SECRET_SEED_PHRASE terdeteksi: ${effectiveSeedPhrase ? 'Ya' : 'TIDAK'}`);
+        if (effectiveSeedPhrase) log(`[DIAGNOSTIK] Indikasi: Hanya ditemukan ${words} kata.`);
+        
+        console.error("\n============================================================");
+        console.error("ERROR: SEED PHRASE BELUM TERISI ATAU TIDAK TERDETEKSI!");
+        console.error("Pastikan nama variabel di file .env adalah: SECRET_SEED_PHRASE");
+        console.error("Contoh isi file .env:");
+        console.error("SECRET_SEED_PHRASE=word1 word2 word3 ... word12");
+        console.error("============================================================\n");
+        process.exit(1);
+    } else {
+        const words = effectiveSeedPhrase.trim().split(/\s+/).length;
+        log(`[DIAGNOSTIK] Status: OK (${words} kata terdeteksi)`);
+    }
 
     try {
         const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
