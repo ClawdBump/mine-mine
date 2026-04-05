@@ -672,39 +672,57 @@ async function triggerMetaMaskPopup(context) {
             }, { timeout: 30000, interval: 3000, label: 'opsi MetaMask di website' });
 
             log("[3.0] ✓ MetaMask di website diklik. Menunggu popup koneksi...");
-            await gamePage.waitForTimeout(5000); 
 
-            // TRIGGER FALLBACK: Jika popup tidak muncul dalam 15 detik, paksa buka
-            const checkPopup = async () => {
-                await gamePage.waitForTimeout(10000);
-                if (popupQueue.length === 0) {
-                    await triggerMetaMaskPopup(context);
-                }
-            };
-            checkPopup(); // Run in parallel
+            // ==============================
+            // FASE 3.5: TUNGGU POPUP METAMASK (BERURUTAN)
+            // ==============================
+            log("\n[FASE 3.5] Menunggu jendela popup MetaMask muncul...");
 
-            // Bersihkan overlay (seperti layar pembuka) jika masih ada
+            // Tunggu popup muncul di antrean (maks 30 detik)
+            const popupArrived = await waitForCondition(gamePage, async () => {
+                return popupQueue.length > 0 || 
+                       context.pages().some(p => p.url().includes('chrome-extension://') && !p.url().includes('home.html'));
+            }, { timeout: 30000, interval: 1000, label: 'popup MetaMask' }).catch(() => false);
+
+            if (!popupArrived) {
+                log("  [3.5] Popup tidak muncul otomatis. Mencoba trigger via Dashboard MetaMask...");
+                await triggerMetaMaskPopup(context);
+            }
+
+            // Tunggu Monitor Latar Belakang selesai memproses semua popup yang ada
+            // (Indikator: popupQueue kosong DAN tidak ada halaman extension aktif non-home)
+            log("  [3.5] Menunggu Monitor selesai memproses popup MetaMask...");
+            await waitForCondition(gamePage, async () => {
+                const hasActivePopup = context.pages().some(p => 
+                    p.url().includes('chrome-extension://') && 
+                    !p.url().includes('home.html') &&
+                    !p.isClosed()
+                );
+                return !hasActivePopup && popupQueue.length === 0;
+            }, { timeout: 120000, interval: 2000, label: 'popup MetaMask selesai diproses' }).catch(() => {});
+
+            log("[FASE 3.5] ✓ Popup MetaMask selesai diproses.");
+
+            // Bersihkan overlay jika masih ada
             await gamePage.evaluate(() => {
                 const screen = document.getElementById('burnEntryScreen');
                 if (screen) { screen.style.pointerEvents = 'none'; screen.style.display = 'none'; }
             }).catch(() => {});
-            
+
             // ==============================
-            // FASE 4: HANDLING POPUP & MANUAL INTERVENTION
+            // FASE 4: VERIFIKASI KONEKSI & INTERVENSI MANUAL JIKA PERLU
             // ==============================
-            log("\n[FASE 4] Menunggu koneksi wallet...");
-            
-            // Tunggu 5 detik agar koneksi selesai di server
-            await gamePage.waitForTimeout(5000);
-            
-            // Coba klik captcha otomatis dulu
+            log("\n[FASE 4] Memverifikasi koneksi diterima oleh game...");
+            await gamePage.bringToFront().catch(() => {});
+            await gamePage.waitForTimeout(3000);
+
+            // Coba klik captcha otomatis jika ada
             await handleCaptcha(gamePage);
-            
+
             // PERIKSA apakah game sudah langsung lanjut
             const langReady = await gamePage.locator('div.lang-card').isVisible({ timeout: 5000 }).catch(() => false);
-            
+
             if (!langReady) {
-                // Game belum lanjut - beri tahu user untuk intervensi manual
                 log("\n============================================================");
                 log("⚠  PERHATIAN: BUKA NOVNC SEKARANG!");
                 log("   Game membutuhkan interaksi manual (captcha / verifikasi).");
@@ -712,8 +730,6 @@ async function triggerMetaMaskPopup(context) {
                 log("   Bot akan otomatis melanjutkan setelah selesai.");
                 log("   Waktu tunggu: 5 menit.");
                 log("============================================================\n");
-                
-                // Pastikan tab game ada di depan layar
                 await gamePage.bringToFront().catch(() => {});
             }
 
@@ -731,7 +747,7 @@ async function triggerMetaMaskPopup(context) {
                 log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
                 await new Promise(() => {});
             }
-            
+
             log("[FASE 4] ✓ Koneksi Wallet Berhasil Terdeteksi!");
 
             // ==============================
