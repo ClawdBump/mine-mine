@@ -719,6 +719,39 @@ async function triggerMetaMaskPopup(context) {
             // Coba klik captcha otomatis jika ada
             await handleCaptcha(gamePage);
 
+            // KLIK "Tap to Begin" jika muncul
+            log("[FASE 4] Mencari tombol 'Tap to Begin'...");
+            await waitForCondition(gamePage, async () => {
+                // Coba klik via selector CSS
+                const tapBtn = gamePage.locator('.prompt[data-i18n="startPrompt"], .tap-to-begin, #tapToBegin').first();
+                if (await tapBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+                    await tapBtn.click({ force: true });
+                    log("  [FASE 4] ✓ 'Tap to Begin' diklik via selector.");
+                    return true;
+                }
+                // Fallback: klik via JavaScript (lebih agresif)
+                const clicked = await gamePage.evaluate(() => {
+                    const tap = document.querySelector('.prompt[data-i18n="startPrompt"]');
+                    if (tap && tap.offsetParent !== null) { tap.click(); return true; }
+                    // Cari berdasarkan teks
+                    const all = document.querySelectorAll('div, button, span, p');
+                    for (const el of all) {
+                        if (el.innerText && el.innerText.trim().match(/tap to begin|click to begin|touch to begin/i) && el.offsetParent !== null) {
+                            el.click(); return true;
+                        }
+                    }
+                    return false;
+                }).catch(() => false);
+                if (clicked) {
+                    log("  [FASE 4] ✓ 'Tap to Begin' diklik via JavaScript.");
+                    return true;
+                }
+                return false;
+            }, { timeout: 15000, interval: 1000, label: 'Tap to Begin' }).catch(() => {
+                log("  [FASE 4] 'Tap to Begin' tidak ditemukan, melanjutkan...");
+            });
+
+            await gamePage.waitForTimeout(1000);
             // PERIKSA apakah game sudah langsung lanjut
             const langReady = await gamePage.locator('div.lang-card').isVisible({ timeout: 5000 }).catch(() => false);
 
