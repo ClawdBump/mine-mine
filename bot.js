@@ -73,43 +73,44 @@ async function startMetaMaskMonitor(context) {
                 const container = popup.locator('.app, #app-content, .main-container').first();
                 await container.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
 
+                // SUB-LOOP: Tangani multi-step di dalam SATU jendela popup
                 let stepCount = 0;
                 while (!popup.isClosed() && stepCount < 8) {
                     stepCount++;
-                    await popup.bringToFront().catch(() => {});
-                    
-                    // Auto-Scroll untuk Signature mendalam
-                    await popup.evaluate(() => {
-                        window.scrollTo(0, document.body.scrollHeight);
-                        const scrollers = document.querySelectorAll('.signature-request-message--signable, .request-signature__scroll, .confirm-page-container-content');
-                        scrollers.forEach(s => s.scrollTop = s.scrollHeight);
-                    }).catch(() => {});
-
-                    // Cari tombol aksi: Prioritaskan Konfirmasi, jika tidak bisa, pilih Cancel/Reject
-                    let actionBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Tanda Tangan"), button:has-text("Setuju"), button:has-text("Konfirmasi"), button:has-text("Permisi")').first();
-                    
-                    // Cek tombol konfirmasi dulu
-                    if (await actionBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
-                        const btnText = await actionBtn.innerText().catch(() => "Aksi");
-                        log(`  [POPUP] Klik Konfirmasi: [${btnText}] (Step ${stepCount})`);
-                        await actionBtn.focus().catch(() => {});
-                        await actionBtn.click({ force: true });
-                        await popup.waitForTimeout(3000);
-                    } else {
-                        // Jika tidak ada tombol konfirmasi, cari tombol pembatalan/penolakan (Cancel/Reject/Tolak/Batal)
-                        const cancelBtn = popup.locator('button:has-text("Cancel"), button:has-text("Reject"), button:has-text("Reject all"), button:has-text("Tolak"), button:has-text("Batal"), button:has-text("Tutup")').first();
+                        await popup.bringToFront().catch(() => {});
                         
-                        if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-                            const btnText = await cancelBtn.innerText().catch(() => "Batal");
-                            log(`  [POPUP] Klik Batal/Cancel: [${btnText}] (Karena tidak bisa di-Confirm)`);
-                            await cancelBtn.focus().catch(() => {});
-                            await cancelBtn.click({ force: true });
+                        // Auto-Scroll untuk Signature mendalam
+                        await popup.evaluate(() => {
+                            window.scrollTo(0, document.body.scrollHeight);
+                            const scrollers = document.querySelectorAll('.signature-request-message--signable, .request-signature__scroll, .confirm-page-container-content');
+                            scrollers.forEach(s => s.scrollTop = s.scrollHeight);
+                        }).catch(() => {});
+
+                        // Tombol POSITIF (Connect, Sign, dll)
+                        const confirmBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Tanda Tangan"), button:has-text("Setuju"), button:has-text("Konfirmasi"), button:has-text("Permisi")').first();
+                        
+                        // Cek tombol konfirmasi dulu (Tunggu lebih lama: 10 detik total per jendela)
+                        if (await confirmBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
+                            const btnText = await confirmBtn.innerText().catch(() => "Confirm");
+                            log(`  [POPUP] Mencoba Konfirmasi: [${btnText}] (Step ${stepCount})`);
+                            await confirmBtn.focus().catch(() => {});
+                            await confirmBtn.click({ force: true });
                             await popup.waitForTimeout(3000);
                         } else {
-                            break; 
+                            // Jika sesudah menunggu 10 detik tetap tidak ada tombol Konfirmasi, baru pilih Cancel/Reject
+                            const cancelBtn = popup.locator('button:has-text("Cancel"), button:has-text("Reject"), button:has-text("Reject all"), button:has-text("Tolak"), button:has-text("Batal"), button:has-text("Tutup")').first();
+                            
+                            if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                                const btnText = await cancelBtn.innerText().catch(() => "Batal");
+                                log(`  [POPUP] Konfirmasi Gagal/Tidak Ada. Memilih Batal: [${btnText}]`);
+                                await cancelBtn.focus().catch(() => {});
+                                await cancelBtn.click({ force: true });
+                                await popup.waitForTimeout(3000);
+                            } else {
+                                break; 
+                            }
                         }
                     }
-                }
             } catch (err) {
                 log(`  [POPUP] Info: Jendela selesai/tertutup.`);
             }
