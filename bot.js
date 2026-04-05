@@ -962,9 +962,9 @@ async function triggerMetaMaskPopup(context) {
                     continue;
                 }
 
-                // ----- CEK 4: Apakah ada Captcha (Cash Out atau interupsi lainnya)? -----
-                // DIMATIKAN SESUAI PERMINTAAN
-                /*
+                // ----- CEK 4: JEDA MANUAL UNTUK CASH OUT / CAPTCHA -----
+                // Jika menu Captcha muncul (contoh saat mau Cash Out), hentikan semua 
+                // "Anti-Idle Jitter" dan gerakan Keyboard agar Anda bisa klik Verify manual di noVNC.
                 const hasCaptchaText = await gamePage.evaluate(() => {
                     const btn = Array.from(document.querySelectorAll('div, button, span')).find(el => el.innerText && el.innerText.trim().match(/^(Verify|Verify me|I am not a robot)$/i) && el.offsetParent !== null);
                     return btn !== undefined;
@@ -973,12 +973,16 @@ async function triggerMetaMaskPopup(context) {
                 const hasCaptchaFrame = gamePage.frames().some(f => f.url().includes('turnstile') || f.url().includes('challenges.cloudflare.com') || f.url().includes('api2/anchor') || f.url().includes('recaptcha'));
 
                 if (hasCaptchaText || hasCaptchaFrame) {
-                    log("-> [CAPTCHA] Captcha terdeteksi selama gameplay! Menangani otomatis...");
-                    await handleCaptcha(gamePage);
+                    if (loopCount % 3 === 0) log("-> [PAUSE] Captcha Cash Out muncul! Bot JEDA SEMENTARA agar Anda bisa klik manual via noVNC...");
+                    
+                    // Lepaskan semua tombol navigasi untuk keamanan
+                    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+                        await gamePage.keyboard.up(key).catch(() => {});
+                    }
+                    
                     await gamePage.waitForTimeout(2000);
-                    // Kita tidak continue agar setelah ditangani bot bisa langsung jalan lagi
+                    continue; // Skip radar dan mouse jitter, restart loop sambil menunggu
                 }
-                */
 
                 // ----- OPERASI UTAMA: RADAR & NAVIGASI -----
                 const radar = await gamePage.evaluate(() => {
