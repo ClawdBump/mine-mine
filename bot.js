@@ -1,5 +1,7 @@
 const path = require('path');
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-extra');
+const stealth = require('puppeteer-extra-plugin-stealth')();
+chromium.use(stealth);
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const METAMASK_PATH = path.join(__dirname, 'metamask-extension').replace(/\\/g, '/');
@@ -316,14 +318,7 @@ async function triggerMetaMaskPopup(context) {
             ]
         });
 
-        // ==============================
-        // STEALTH: Sembunyikan jejak bot
-        // ==============================
-        await context.addInitScript(() => {
-            // Hapus properti webdriver (tidak ganggu MetaMask)
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            // JANGAN override window.chrome - MetaMask butuh chrome.runtime untuk berfungsi
-        });
+
         
         // ==============================
         // DEBUG TELEMETRY: Pantau penutupan tab
