@@ -64,14 +64,32 @@ async function startMetaMaskMonitor(context) {
             handledPopups.add(popup);
             
             try {
-                // Tunggu render awal
-                await popup.waitForLoadState('load', { timeout: 15000 }).catch(() => {});
+                // Tunggu render awal (Meningkatkan timeout untuk inisialisasi di VPS)
+                await popup.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
                 await popup.bringToFront().catch(() => {});
+                
+                // FORCE RENDER: Di VPS 16GB, kita bisa paksa resize sedikit untuk trigger rendering X11
+                await popup.setViewportSize({ width: 360, height: 600 }).catch(() => {});
                 await popup.waitForTimeout(2000);
                 
-                // Tunggu elemen internal muncul
-                const container = popup.locator('.app, #app-content, .main-container').first();
-                await container.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+                // SELF-HEALING: Jika jendela putih/blank (tidak ada konten app)
+                let checkCount = 0;
+                let hasContent = false;
+                while (checkCount < 3 && !hasContent) {
+                    checkCount++;
+                    hasContent = await popup.locator('.app, #app-content, .main-container').isVisible({ timeout: 10000 }).catch(() => false);
+                    if (!hasContent) {
+                        log(`  [POPUP] Jendela putih/macet (Percobaan ${checkCount}). Reloading...`);
+                        await popup.reload().catch(() => {});
+                        await popup.waitForTimeout(5000);
+                    }
+                }
+
+                if (!hasContent) {
+                    log("  [POPUP] Gagal memuat konten setelah 3x reload. Menutup jendela untuk reset...");
+                    await popup.close().catch(() => {});
+                    return;
+                }
 
                 // SUB-LOOP: Tangani multi-step di dalam SATU jendela popup
                 let stepCount = 0;
@@ -170,7 +188,12 @@ async function startMetaMaskMonitor(context) {
             args: [
                 `--disable-extensions-except=${METAMASK_PATH}`,
                 `--load-extension=${METAMASK_PATH}`,
-                '--disable-blink-features=AutomationControlled'
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--disable-software-rasterizer'
             ]
         });
         
