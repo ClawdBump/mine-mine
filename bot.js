@@ -38,6 +38,87 @@ function log(msg) {
     console.log(`[${ts}] ${msg}`);
 }
 
+// ============================================================
+// GLOBAL MONITOR: Menangani PopUp MetaMask di Latar Belakang
+// ============================================================
+let monitorEnabled = false; 
+const handledPopups = new Set();
+const popupQueue = [];
+
+async function startMetaMaskMonitor(context) {
+    log("[SYSTEM] Monitor MetaMask Latar Belakang Aktif.");
+    
+    while (true) {
+        if (!monitorEnabled) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+        }
+
+        // Ambil dari Queue (Event-driven) atau Scan (Fallback)
+        let popup = popupQueue.shift() || context.pages().find(p => p.url().includes('chrome-extension://') && !handledPopups.has(p));
+        
+        if (popup) {
+            if (handledPopups.has(popup)) continue;
+            
+            log(`\n[POPUP] Memproses Jendela MetaMask (${popup.url()})...`);
+            handledPopups.add(popup);
+            
+            try {
+                // Tunggu render awal
+                await popup.waitForLoadState('load', { timeout: 15000 }).catch(() => {});
+                await popup.bringToFront().catch(() => {});
+                await popup.waitForTimeout(2000);
+                
+                // Tunggu elemen internal muncul
+                const container = popup.locator('.app, #app-content, .main-container').first();
+                await container.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+
+                let stepCount = 0;
+                while (!popup.isClosed() && stepCount < 8) {
+                    stepCount++;
+                    await popup.bringToFront().catch(() => {});
+                    
+                    // Auto-Scroll untuk Signature mendalam
+                    await popup.evaluate(() => {
+                        window.scrollTo(0, document.body.scrollHeight);
+                        const scrollers = document.querySelectorAll('.signature-request-message--signable, .request-signature__scroll, .confirm-page-container-content');
+                        scrollers.forEach(s => s.scrollTop = s.scrollHeight);
+                    }).catch(() => {});
+
+                    // Cari tombol aksi: Prioritaskan Konfirmasi, jika tidak bisa, pilih Cancel/Reject
+                    let actionBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Tanda Tangan"), button:has-text("Setuju"), button:has-text("Konfirmasi"), button:has-text("Permisi")').first();
+                    
+                    // Cek tombol konfirmasi dulu
+                    if (await actionBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
+                        const btnText = await actionBtn.innerText().catch(() => "Aksi");
+                        log(`  [POPUP] Klik Konfirmasi: [${btnText}] (Step ${stepCount})`);
+                        await actionBtn.focus().catch(() => {});
+                        await actionBtn.click({ force: true });
+                        await popup.waitForTimeout(3000);
+                    } else {
+                        // Jika tidak ada tombol konfirmasi, cari tombol pembatalan/penolakan (Cancel/Reject/Tolak/Batal)
+                        const cancelBtn = popup.locator('button:has-text("Cancel"), button:has-text("Reject"), button:has-text("Reject all"), button:has-text("Tolak"), button:has-text("Batal"), button:has-text("Tutup")').first();
+                        
+                        if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+                            const btnText = await cancelBtn.innerText().catch(() => "Batal");
+                            log(`  [POPUP] Klik Batal/Cancel: [${btnText}] (Karena tidak bisa di-Confirm)`);
+                            await cancelBtn.focus().catch(() => {});
+                            await cancelBtn.click({ force: true });
+                            await popup.waitForTimeout(3000);
+                        } else {
+                            break; 
+                        }
+                    }
+                }
+            } catch (err) {
+                log(`  [POPUP] Info: Jendela selesai/tertutup.`);
+            }
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+}
+
 (async () => {
     log("Memulai bot dan MetaMask menggunakan Sistem AI Cerdas...");
     
@@ -95,15 +176,16 @@ function log(msg) {
         // ==============================
         // AGGRESSIVE POPUP LISTENER
         // ==============================
-        const popupQueue = [];
         context.on('page', (newPage) => {
             const url = newPage.url() || "";
-            // Tangkap SEMUA halaman ekstensi (kecuali setup awal jika sudah terdeteksi)
             if (url.includes('chrome-extension://')) {
-                log(`[POPUP/TAB] Jendela MetaMask baru terdeteksi: ${url}`);
+                log(`[SYSTEM] Halaman MetaMask terdeteksi: ${url}`);
                 popupQueue.push(newPage);
             }
         });
+
+        // Jalankan monitor di latar belakang (Non-blocking)
+        startMetaMaskMonitor(context).catch(err => log(`[CRITICAL] Monitor Error: ${err.message}`));
 
         // ==============================
         // FASE 0: SETUP METAMASK
@@ -341,6 +423,10 @@ function log(msg) {
                     
                     await metamaskPage.waitForTimeout(2000);
                     log("  [SETUP] Persiapan MetaMask Selesai. Membuka Game...");
+                    
+                    // AKTIFKAN MONITOR OTOMATIS SEKARANG
+                    monitorEnabled = true;
+                    log("[SYSTEM] Monitor MetaMask Latar Belakang TELAH DIAKTIFKAN.");
                 } catch (netErr) {
                     log(`  [ERROR] Gagal memastikan jaringan Base: ${netErr.message}`);
                     log("  [ERROR] Bot berhenti di sini agar tidak terjadi error koneksi di Game.");
@@ -462,79 +548,17 @@ function log(msg) {
             }).catch(() => {});
             
             // ==============================
-            // FASE 4: APPROVE SEMUA POPUP METAMASK (Sekuensial)
+            // FASE 4: HANDLING POPUP (Sekarang Otomatis di Latar Belakang)
             // ==============================
-            log("\n[FASE 4] Menangani popup MetaMask (Approve/Connect/Sign)...");
+            log("\n[FASE 4] Menunggu koneksi wallet (ditangani Monitor Latar Belakang)...");
             
-            let popupCount = 0;
-            let noPopupStreak = 0;
-            const MAX_NO_POPUP_STREAK = 20; 
-            const handledPopups = new Set();
-
-            while (noPopupStreak < MAX_NO_POPUP_STREAK) {
-                // Scan Queue prioritaskan, atau scan context.pages() sebagai fallback
-                let popup = popupQueue.shift() || context.pages().find(p => p.url().includes('chrome-extension://') && !handledPopups.has(p));
-                
-                if (popup) {
-                    noPopupStreak = 0;
-                    if (handledPopups.has(popup)) continue;
-                    
-                    popupCount++;
-                    handledPopups.add(popup);
-                    log(`\n[4.${popupCount}] Memproses Jendela MetaMask (${popup.url()})...`);
-                    
-                    try {
-                        // Tunggu render awal (sampai URL stabil)
-                        await popup.waitForLoadState('load', { timeout: 15000 }).catch(() => {});
-                        await popup.bringToFront().catch(() => {});
-                        await popup.waitForTimeout(2000); // Jeda extra agar UI tidak lag
-                        
-                        // Tunggu elemen internal MetaMask muncul (agar tidak klik di layar kosong)
-                        const container = popup.locator('.app, #app-content, .main-container').first();
-                        await container.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
-
-                        let stepCount = 0;
-                        while (!popup.isClosed() && stepCount < 6) {
-                            stepCount++;
-                            await popup.bringToFront().catch(() => {});
-                            
-                            // SCROLL: Terkadang tombol Signature/Sign tersembunyi di bawah
-                            await popup.evaluate(() => {
-                                window.scrollTo(0, document.body.scrollHeight);
-                                const container = document.querySelector('.signature-request-message--signable, .request-signature__scroll');
-                                if (container) container.scrollTop = container.scrollHeight;
-                            }).catch(() => {});
-
-                            // Cari tombol aksi: Next, Connect, Approve, Confirm, Sign, Sign-in, Tanda Tangan, Setuju
-                            const actionBtn = popup.locator('button:has-text("Next"), button:has-text("Connect"), button:has-text("Approve"), button:has-text("Confirm"), button:has-text("Sign"), button:has-text("Sign-in"), button:has-text("Tanda Tangan"), button:has-text("Setuju"), button:has-text("Konfirmasi")').first();
-                            
-                            if (await actionBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                                const btnText = await actionBtn.innerText().catch(() => "Aksi");
-                                log(`  [4.${popupCount}.${stepCount}] Klik: [${btnText}]`);
-                                
-                                await actionBtn.focus().catch(() => {});
-                                await actionBtn.click({ force: true });
-                                
-                                await popup.waitForTimeout(2500);
-                            } else {
-                                break; 
-                            }
-                        }
-                        log(`  [4.${popupCount}] Selesai.`);
-                    } catch (pErr) {
-                        log(`  [4.x] Info: Jendela MetaMask ditutup.`);
-                    }
-                } else {
-                    noPopupStreak++;
-                }
-                await gamePage.waitForTimeout(1000);
-            }
+            // Tunggu hingga game masuk ke pemilihan bahasa
+            await waitForCondition(gamePage, async () => {
+                const langReady = await gamePage.locator('div.lang-card').isVisible({ timeout: 2000 }).catch(() => false);
+                return langReady;
+            }, { timeout: 60000, interval: 3000, label: 'menu bahasa (Koneksi Berhasil)' });
             
-            log(`[FASE 4] ✓ Semua popup MetaMask ditangani (${popupCount} aksi).`);
-            
-            // Kembalikan fokus ke game
-            await gamePage.bringToFront();
-            await gamePage.waitForTimeout(1000);
+            log("[FASE 4] ✓ Koneksi Wallet Berhasil Terdeteksi!");
 
             // ==============================
             // FASE 5: PILIH BAHASA (English)
