@@ -222,14 +222,25 @@ async function triggerMetaMaskPopup(context) {
         });
         
         // ==============================
-        // AGGRESSIVE POPUP LISTENER
+        // DEBUG TELEMETRY: Pantau penutupan tab
         // ==============================
         context.on('page', (newPage) => {
             const url = newPage.url() || "";
+            log(`[DEBUG] Tab Baru Dibuka: ${url}`);
+            
             if (url.includes('chrome-extension://')) {
                 log(`[SYSTEM] Halaman MetaMask terdeteksi: ${url}`);
                 popupQueue.push(newPage);
             }
+            
+            // Catat jika tab ditutup
+            newPage.on('close', () => {
+                log(`[DEBUG] Tab ditutup: ${newPage.url()}`);
+            });
+        });
+
+        context.on('close', () => {
+            log("[CRITICAL] Browser Context TELAH TERTUTUP! Sesuatu mematikan Chrome.");
         });
 
         // Jalankan monitor di latar belakang (Non-blocking)
