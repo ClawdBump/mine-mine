@@ -73,11 +73,21 @@ async function startMetaMaskMonitor(context) {
             handledPopups.add(popup);
             
             try {
-                // Tunggu render awal
+                // Tunggu render awal (Meningkatkan kesabaran untuk VPS)
                 log(`  [POPUP] Membuka jendela: ${popup.url()}`);
                 await popup.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
                 await popup.bringToFront().catch(() => {});
-                await popup.waitForTimeout(3000);
+                
+                // TUNGGU SAMPAI UI INTERNAL SIAP (Sangat Penting)
+                log("  [POPUP] Menunggu UI MetaMask selesai inisialisasi...");
+                const uiReady = await popup.locator('.app, #app-content, .main-container').isVisible({ timeout: 20000 }).catch(() => false);
+                if (!uiReady) {
+                    log("  [POPUP] Peringatan: UI belum sepenuhnya siap, tapi bot akan tetap mencoba mencari tombol.");
+                } else {
+                    log("  [POPUP] UI siap. Memulai pemrosesan.");
+                }
+                
+                await popup.waitForTimeout(5000); // Jeda ekstra agar stabil
 
                 // SUB-LOOP: Step-by-step di dalam jendela
                 let stepCount = 0;
