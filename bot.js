@@ -767,27 +767,15 @@ async function triggerMetaMaskPopup(context) {
             }
 
             // Tunggu hingga game masuk ke pemilihan bahasa (Maks 5 menit)
-            // Gunakan JavaScript langsung karena isVisible() kadang tidak akurat
-            log("[FASE 4] Menunggu menu bahasa muncul...");
+            // Gunakan JavaScript untuk mendeteksi kehadiran menu bahasa (konfirmasi koneksi)
+            log("[FASE 4] Menunggu menu bahasa muncul sebagai tanda koneksi berhasil...");
             const langMenu = await waitForCondition(gamePage, async () => {
-                const clicked = await gamePage.evaluate(() => {
-                    // Cara 1: Langsung panggil fungsi chooseLang jika tersedia
-                    if (typeof chooseLang === 'function') {
-                        chooseLang('en');
-                        return true;
-                    }
-                    // Cara 2: Klik elemen lang-card yang ada teks ENGLISH
-                    const cards = document.querySelectorAll('.lang-card');
-                    for (const card of cards) {
-                        if (card.innerText && card.innerText.includes('ENGLISH')) {
-                            card.click();
-                            return true;
-                        }
-                    }
-                    // Cara 3: Cek apakah elemen ada di DOM (meski tersembunyi)
-                    return document.querySelector('.lang-card') !== null;
+                return await gamePage.evaluate(() => {
+                    // Cek menu bahasa ATAU sudah lewat (karakter/hud muncul)
+                    return document.querySelector('.lang-card') !== null ||
+                           document.querySelector('#avatarToad') !== null ||
+                           document.querySelector('#hud') !== null;
                 }).catch(() => false);
-                return clicked;
             }, { timeout: 300000, interval: 3000, label: 'menu bahasa (Koneksi Berhasil)' }).catch(() => null);
 
             if (!langMenu) {
@@ -803,53 +791,40 @@ async function triggerMetaMaskPopup(context) {
             // ==============================
             // FASE 5: PILIH BAHASA (English)
             // ==============================
-            log("\n[FASE 5] Menunggu tombol bahasa 'ENGLISH'...");
+            log("\n[FASE 5] Memilih bahasa ENGLISH...");
 
-            // Cek dulu apakah game sudah melewati layar bahasa (karena Fase 4 sudah handle)
+            // Cek dulu apakah sudah melewati layar bahasa
             const alreadyPastLang = await gamePage.evaluate(() => {
-                return document.querySelector('#avatarToad, #hud, canvas') !== null &&
-                       document.querySelector('.lang-card') === null;
+                return document.querySelector('.lang-card') === null &&
+                       (document.querySelector('#avatarToad') !== null || document.querySelector('#hud') !== null);
             }).catch(() => false);
 
             if (alreadyPastLang) {
                 log("[FASE 5] ✓ Skip — Game sudah melewati layar pemilihan bahasa.");
             } else {
                 await waitForCondition(gamePage, async () => {
-                    // Coba JS langsung dulu (lebih andal)
-                    const clicked = await gamePage.evaluate(() => {
+                    return await gamePage.evaluate(() => {
+                        // Cara 1: Panggil fungsi internal chooseLang
                         if (typeof chooseLang === 'function') { chooseLang('en'); return true; }
+                        // Cara 2: Klik elemen .lang-card berisi ENGLISH
                         const cards = document.querySelectorAll('.lang-card');
                         for (const card of cards) {
                             if (card.innerText && card.innerText.includes('ENGLISH')) { card.click(); return true; }
                         }
                         return false;
                     }).catch(() => false);
-                    if (clicked) return true;
-
-                    // Fallback: Playwright click
-                    const btnUS = gamePage.locator('div.lang-card').filter({ hasText: /ENGLISH/i }).first();
-                    if (await btnUS.isVisible({ timeout: 1000 }).catch(() => false)) {
-                        await btnUS.click();
-                        return true;
-                    }
-                    // Singkirkan Tap To Begin jika masih menghalangi
-                    await gamePage.evaluate(() => {
-                        const tap = document.querySelector('.prompt[data-i18n="startPrompt"]');
-                        if (tap) tap.click();
-                    }).catch(() => {});
-                    return false;
                 }, { timeout: 60000, interval: 2000, label: 'tombol bahasa ENGLISH' });
                 log("[FASE 5] ✓ Bahasa ENGLISH terpilih!");
             }
-            
-            // VERIFIKASI: Tunggu layar karakter benar-benar muncul
-            log("[FASE 5] Memverifikasi: Menunggu layar karakter muncul...");
+
+            // VERIFIKASI: Tunggu layar karakter/HUD benar-benar muncul via JS
+            log("[FASE 5] Memverifikasi: Menunggu layar karakter atau HUD muncul...");
             await waitForCondition(gamePage, async () => {
-                // Cek apakah avatar atau HUD sudah muncul
-                const avatarVisible = await gamePage.locator('#avatarToad').isVisible({ timeout: 1000 }).catch(() => false);
-                const hudVisible = await gamePage.locator('#hud').isVisible({ timeout: 500 }).catch(() => false);
-                return avatarVisible || hudVisible;
-            }, { timeout: 30000, interval: 1000, label: 'layar pemilihan karakter' });
+                return await gamePage.evaluate(() => {
+                    return document.querySelector('#avatarToad') !== null ||
+                           document.querySelector('#hud') !== null;
+                }).catch(() => false);
+            }, { timeout: 30000, interval: 1000, label: 'layar karakter/HUD' });
             log("[FASE 5] ✓ Layar karakter terverifikasi muncul!");
 
             // ==============================
