@@ -149,15 +149,25 @@ async function startMetaMaskMonitor(context) {
 }
 
 // ==============================
-// TRIGGER: Paksa Buka Jendela Notifikasi MetaMask
+// TRIGGER: Paksa Buka Jendela MetaMask yang tertahan (Safe Mode)
 // ==============================
 async function triggerMetaMaskPopup(context) {
     if (!extensionId) return;
-    log(`[SYSTEM] Mencoba membuka paksa notifikasi MetaMask: chrome-extension://${extensionId}/notification.html`);
-    const page = await context.newPage().catch(() => null);
-    if (page) {
-        await page.goto(`chrome-extension://${extensionId}/notification.html`).catch(() => {});
-        // Jendela ini akan ditangkap oleh Monitor Latar Belakang secara otomatis
+    
+    // Cari apakah sudah ada tab MetaMask yang terbuka (biar tidak bikin tab baru terus)
+    let existingPage = context.pages().find(p => p.url().includes(extensionId));
+    
+    if (existingPage) {
+        log(`[SYSTEM] Menemukan tab MetaMask lama. Melakukan Reload untuk memicu notifikasi...`);
+        await existingPage.reload().catch(() => {});
+        await existingPage.bringToFront().catch(() => {});
+    } else {
+        log(`[SYSTEM] Membuka Dashboard MetaMask untuk memicu notifikasi tertunda...`);
+        const page = await context.newPage().catch(() => null);
+        if (page) {
+            // Gunakan home.html karena jauh lebih stabil daripada notification.html di VPS
+            await page.goto(`chrome-extension://${extensionId}/home.html`).catch(() => {});
+        }
     }
 }
 
