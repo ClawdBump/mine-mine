@@ -484,8 +484,15 @@ function log(msg) {
                     log(`\n[4.${popupCount}] Memproses Jendela MetaMask (${popup.url()})...`);
                     
                     try {
-                        await popup.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
+                        // Tunggu render awal (sampai URL stabil)
+                        await popup.waitForLoadState('load', { timeout: 15000 }).catch(() => {});
+                        await popup.bringToFront().catch(() => {});
+                        await popup.waitForTimeout(2000); // Jeda extra agar UI tidak lag
                         
+                        // Tunggu elemen internal MetaMask muncul (agar tidak klik di layar kosong)
+                        const container = popup.locator('.app, #app-content, .main-container').first();
+                        await container.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+
                         let stepCount = 0;
                         while (!popup.isClosed() && stepCount < 6) {
                             stepCount++;
