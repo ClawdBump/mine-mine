@@ -159,6 +159,49 @@ async function startMetaMaskMonitor(context) {
 }
 
 // ==============================
+// CAPTCHA: Deteksi & Klik Otomatis (Centang "Verify")
+// ==============================
+async function handleCaptcha(page) {
+    try {
+        log("[CAPTCHA] Memeriksa apakah ada tantangan Verify...");
+        
+        // 1. Deteksi Cloudflare Turnstile (Sering dipakai gemminer)
+        const turnstileFrame = page.frames().find(f => f.url().includes('turnstile') || f.url().includes('challenges.cloudflare.com'));
+        if (turnstileFrame) {
+            log("  [CAPTCHA] Deteksi Cloudflare Turnstile! Mencoba mengklik checkbox...");
+            const checkbox = turnstileFrame.locator('.mark, .checkbox, #challenge-stage, #content').first();
+            if (await checkbox.isVisible({ timeout: 5000 }).catch(() => false)) {
+                await checkbox.click({ force: true, delay: 150 }).catch(() => {});
+                log("  [CAPTCHA] ✓ Checkbox diklik via Turnstile Frame.");
+                await page.waitForTimeout(3000);
+            }
+        }
+
+        // 2. Google reCAPTCHA
+        const recaptchaFrame = page.frames().find(f => f.url().includes('api2/anchor') || f.url().includes('recaptcha'));
+        if (recaptchaFrame) {
+            log("  [CAPTCHA] Deteksi reCAPTCHA! Mencoba mengklik checkbox...");
+            const checkbox = recaptchaFrame.locator('#recaptcha-anchor, .recaptcha-checkbox-border').first();
+            if (await checkbox.isVisible({ timeout: 5000 }).catch(() => false)) {
+                await checkbox.click({ force: true, delay: 150 }).catch(() => {});
+                log("  [CAPTCHA] ✓ Checkbox diklik via reCAPTCHA Frame.");
+                await page.waitForTimeout(3000);
+            }
+        }
+
+        // 3. Custom Button Check
+        const verifyBtn = page.locator('div, button, span').filter({ hasText: /^Verify|Verify me|I am not a robot$/i }).first();
+        if (await verifyBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+            log("  [CAPTCHA] Menemukan tombol pencentang kustom. Mengklik...");
+            await verifyBtn.click({ force: true }).catch(() => {});
+            log("  [CAPTCHA] ✓ Tombol kustom diklik.");
+        }
+    } catch (err) {
+        log(`  [CAPTCHA] Info: Tidak ada captcha yang aktif atau gagal diklik: ${err.message}`);
+    }
+}
+
+// ==============================
 // TRIGGER: Paksa Buka Jendela MetaMask yang tertahan (Safe Mode)
 // ==============================
 async function triggerMetaMaskPopup(context) {
@@ -631,15 +674,36 @@ async function triggerMetaMaskPopup(context) {
             }).catch(() => {});
             
             // ==============================
-            // FASE 4: HANDLING POPUP (Sekarang Otomatis di Latar Belakang)
+            // FASE 4: HANDLING POPUP & CAPTCHA
             // ==============================
-            log("\n[FASE 4] Menunggu koneksi wallet (ditangani Monitor Latar Belakang)...");
+            log("\n[FASE 4] Menunggu koneksi wallet...");
             
+            // Tunggu 10 detik agar koneksi benar-benar selesai di server
+            await gamePage.waitForTimeout(10000);
+            
+            // JALANKAN AUTO-CAPTCHA (Centang "Verify")
+            await handleCaptcha(gamePage);
+
             // Tunggu hingga game masuk ke pemilihan bahasa (Tunggu lebih lama: 120 detik)
-            await waitForCondition(gamePage, async () => {
+            log("[FASE 4] Menunggu menu bahasa muncul (English)...");
+            const langMenu = await waitForCondition(gamePage, async () => {
                 const langReady = await gamePage.locator('div.lang-card').isVisible({ timeout: 2000 }).catch(() => false);
+                if (!langReady) {
+                    // Cek lagi captcha kali saja baru muncul setelah delay
+                    await handleCaptcha(gamePage);
+                }
                 return langReady;
-            }, { timeout: 120000, interval: 3000, label: 'menu bahasa (Koneksi Berhasil)' });
+            }, { timeout: 120000, interval: 5000, label: 'menu bahasa (Koneksi Berhasil)' }).catch(() => null);
+
+            if (!langMenu) {
+                log("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                log("PERINGATAN: MENU BAHASA TIDAK MUNCUL!");
+                log("Kemungkinan CAPTCHA tertahan atau butuh solving manual di noVNC.");
+                log("Halaman saat ini akan dibiarkan menyala agar Anda bisa memperbaikinya.");
+                log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+                // Stay alive loop (sudah ada di catch global, tapi di sini biar lebih jelas)
+                await new Promise(() => {});
+            }
             
             log("[FASE 4] ✓ Koneksi Wallet Berhasil Terdeteksi!");
 
