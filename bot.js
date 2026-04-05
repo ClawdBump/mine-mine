@@ -833,35 +833,47 @@ async function triggerMetaMaskPopup(context) {
             log("\n[FASE 6] Memilih karakter Toad...");
             
             // Cek dulu apakah sudah langsung masuk game (HUD muncul)
-            const sudahMasuk = await gamePage.locator('#hud').isVisible({ timeout: 1000 }).catch(() => false);
-            
+            // Cek via JS apakah HUD sudah muncul (skip jika sudah)
+            const sudahMasuk = await gamePage.evaluate(() => {
+                return document.querySelector('#hud') !== null;
+            }).catch(() => false);
+
             if (sudahMasuk) {
                 log("[FASE 6] ✓ Skip — HUD sudah terdeteksi (game sudah dimulai).");
             } else {
-                const charBtn = gamePage.locator('#avatarToad');
-                await charBtn.waitFor({ state: 'visible', timeout: 15000 });
-                await charBtn.click({ force: true, delay: 100 });
-                log("[FASE 6] Karakter Toad diklik!");
-                
-                // Cari tombol konfirmasi Play
-                const playBtn = gamePage.locator('button, div').filter({ hasText: /Play|Start Game|Enter|Start Mining/i }).first();
-                if (await playBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                    await playBtn.click({ force: true });
-                    log("[FASE 6] ✓ Konfirmasi Play ditekan!");
-                }
-                
-                // VERIFIKASI: Tunggu HUD game benar-benar muncul
+                // Tunggu avatar Toad muncul via JS
+                await waitForCondition(gamePage, async () => {
+                    return await gamePage.evaluate(() => document.querySelector('#avatarToad') !== null).catch(() => false);
+                }, { timeout: 15000, interval: 500, label: 'avatar Toad' });
+
+                // Klik avatar Toad via JS
+                const toadClicked = await gamePage.evaluate(() => {
+                    const toad = document.querySelector('#avatarToad');
+                    if (toad) { toad.click(); return true; }
+                    return false;
+                }).catch(() => false);
+                if (toadClicked) log("[FASE 6] Karakter Toad diklik!");
+
+                // Cari tombol konfirmasi Play via JS
+                await gamePage.waitForTimeout(1000);
+                await gamePage.evaluate(() => {
+                    const all = document.querySelectorAll('button, div');
+                    for (const el of all) {
+                        if (el.innerText && el.innerText.match(/^(Play|Start Game|Enter|Start Mining)$/i) && el.offsetParent !== null) {
+                            el.click(); break;
+                        }
+                    }
+                }).catch(() => {});
+
+                // VERIFIKASI: Tunggu HUD muncul via JS, sambil klik Tap To Begin jika ada
                 log("[FASE 6] Memverifikasi: Menunggu HUD game muncul...");
                 await waitForCondition(gamePage, async () => {
-                    const hudVisible = await gamePage.locator('#hud').isVisible({ timeout: 500 }).catch(() => false);
-                    if (!hudVisible) {
-                        // Mungkin ada Tap To Begin lagi
-                        await gamePage.evaluate(() => {
-                            const tap = document.querySelector('.prompt[data-i18n="startPrompt"]');
-                            if (tap) tap.click();
-                        }).catch(() => {});
-                    }
-                    return hudVisible;
+                    return await gamePage.evaluate(() => {
+                        // Klik Tap To Begin jika masih ada
+                        const tap = document.querySelector('.prompt[data-i18n="startPrompt"]');
+                        if (tap && tap.offsetParent !== null) tap.click();
+                        return document.querySelector('#hud') !== null;
+                    }).catch(() => false);
                 }, { timeout: 30000, interval: 1500, label: 'HUD game' });
                 log("[FASE 6] ✓ HUD game terverifikasi muncul!");
             }
