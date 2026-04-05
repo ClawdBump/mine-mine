@@ -59,7 +59,7 @@ async function startMetaMaskMonitor(context) {
         }
 
         // Ambil dari Queue (Event-driven) atau Scan (Fallback) - SATU PER SATU
-        let popup = popupQueue.shift() || context.pages().find(p => p.url().includes('chrome-extension://') && !handledPopups.has(p));
+        let popup = popupQueue.shift() || context.pages().find(p => p.url().includes('chrome-extension://') && !p.url().includes('home.html') && !handledPopups.has(p));
         
         if (popup) {
             if (handledPopups.has(popup)) continue;
@@ -462,7 +462,8 @@ async function triggerMetaMaskPopup(context) {
                     }
                     
                     await metamaskPage.waitForTimeout(2000);
-                    log("  [SETUP] Persiapan MetaMask Selesai. Membuka Game...");
+                    log("  [SETUP] Persiapan MetaMask Selesai. Menutup Tab MetaMask...");
+                    await metamaskPage.close().catch(() => {});
                     
                     // AKTIFKAN MONITOR OTOMATIS SEKARANG
                     monitorEnabled = true;
