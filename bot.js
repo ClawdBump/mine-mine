@@ -804,22 +804,43 @@ async function triggerMetaMaskPopup(context) {
             // FASE 5: PILIH BAHASA (English)
             // ==============================
             log("\n[FASE 5] Menunggu tombol bahasa 'ENGLISH'...");
-            
-            await waitForCondition(gamePage, async () => {
-                const btnUS = gamePage.locator('div.lang-card').filter({ hasText: /ENGLISH/i }).first();
-                if (await btnUS.isVisible({ timeout: 1000 }).catch(() => false)) {
-                    await btnUS.click();
-                    return true;
-                }
-                // Singkirkan Tap To Begin jika menghalangi
-                await gamePage.evaluate(() => {
-                    const tap = document.querySelector('.prompt[data-i18n="startPrompt"]');
-                    if (tap) tap.click();
-                }).catch(() => {});
-                return false;
-            }, { timeout: 60000, interval: 2000, label: 'tombol bahasa ENGLISH' });
-            
-            log("[FASE 5] ✓ Bahasa ENGLISH terpilih!");
+
+            // Cek dulu apakah game sudah melewati layar bahasa (karena Fase 4 sudah handle)
+            const alreadyPastLang = await gamePage.evaluate(() => {
+                return document.querySelector('#avatarToad, #hud, canvas') !== null &&
+                       document.querySelector('.lang-card') === null;
+            }).catch(() => false);
+
+            if (alreadyPastLang) {
+                log("[FASE 5] ✓ Skip — Game sudah melewati layar pemilihan bahasa.");
+            } else {
+                await waitForCondition(gamePage, async () => {
+                    // Coba JS langsung dulu (lebih andal)
+                    const clicked = await gamePage.evaluate(() => {
+                        if (typeof chooseLang === 'function') { chooseLang('en'); return true; }
+                        const cards = document.querySelectorAll('.lang-card');
+                        for (const card of cards) {
+                            if (card.innerText && card.innerText.includes('ENGLISH')) { card.click(); return true; }
+                        }
+                        return false;
+                    }).catch(() => false);
+                    if (clicked) return true;
+
+                    // Fallback: Playwright click
+                    const btnUS = gamePage.locator('div.lang-card').filter({ hasText: /ENGLISH/i }).first();
+                    if (await btnUS.isVisible({ timeout: 1000 }).catch(() => false)) {
+                        await btnUS.click();
+                        return true;
+                    }
+                    // Singkirkan Tap To Begin jika masih menghalangi
+                    await gamePage.evaluate(() => {
+                        const tap = document.querySelector('.prompt[data-i18n="startPrompt"]');
+                        if (tap) tap.click();
+                    }).catch(() => {});
+                    return false;
+                }, { timeout: 60000, interval: 2000, label: 'tombol bahasa ENGLISH' });
+                log("[FASE 5] ✓ Bahasa ENGLISH terpilih!");
+            }
             
             // VERIFIKASI: Tunggu layar karakter benar-benar muncul
             log("[FASE 5] Memverifikasi: Menunggu layar karakter muncul...");
