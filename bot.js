@@ -64,7 +64,7 @@ async function startMetaMaskMonitor(context) {
         if (popup) {
             // JANGAN PERNAH PROSES ATAU TUTUP TAB UTAMA GAME
             if (mainGamePage && popup === mainGamePage) {
-                popupQueue.shift(); // Buang dari antrean jika salah masuk
+                // Jangan shift lagi, popup sudah di-shift di baris 61
                 continue;
             }
             if (handledPopups.has(popup)) continue;
@@ -611,11 +611,11 @@ async function triggerMetaMaskPopup(context) {
             // ==============================
             log("\n[FASE 4] Menunggu koneksi wallet (ditangani Monitor Latar Belakang)...");
             
-            // Tunggu hingga game masuk ke pemilihan bahasa
+            // Tunggu hingga game masuk ke pemilihan bahasa (Tunggu lebih lama: 120 detik)
             await waitForCondition(gamePage, async () => {
                 const langReady = await gamePage.locator('div.lang-card').isVisible({ timeout: 2000 }).catch(() => false);
                 return langReady;
-            }, { timeout: 60000, interval: 3000, label: 'menu bahasa (Koneksi Berhasil)' });
+            }, { timeout: 120000, interval: 3000, label: 'menu bahasa (Koneksi Berhasil)' });
             
             log("[FASE 4] ✓ Koneksi Wallet Berhasil Terdeteksi!");
 
@@ -864,9 +864,13 @@ async function triggerMetaMaskPopup(context) {
         } catch (web3Err) {
             log("\n[ERROR WEB3 GAME] Gagal menyambung atau layar tidak terdeteksi bot.");
             console.error("Penyebab:", web3Err.message);
+            // Jangan tutup browser agar user bisa lihat apa yang tersangkut
+            await new Promise(() => {});
         }
         
     } catch (err) {
-        console.error("Gagal menjalankan bot secara fatal:", err);
+        log(`\n[FATAL ERROR] Terjadi kesalahan fatal: ${err.message}`);
+        // Jangan tutup browser agar user bisa lihat apa yang tersangkut
+        await new Promise(() => {});
     }
 })();
