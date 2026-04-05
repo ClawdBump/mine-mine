@@ -185,6 +185,7 @@ async function startMetaMaskMonitor(context) {
     try {
         const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
             headless: false,
+            viewport: { width: 1366, height: 768 },
             args: [
                 `--disable-extensions-except=${METAMASK_PATH}`,
                 `--load-extension=${METAMASK_PATH}`,
