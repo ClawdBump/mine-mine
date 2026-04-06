@@ -299,7 +299,7 @@ async function triggerMetaMaskPopup(context) {
     }
 
     try {
-        const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+        let browserSetup = {
             headless: false,
             viewport: { width: 1366, height: 900 },
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
@@ -316,7 +316,23 @@ async function triggerMetaMaskPopup(context) {
                 '--disable-infobars',
                 '--window-position=0,0'
             ]
-        });
+        };
+
+        if (process.env.PROXY_URL) {
+            log(`[SYSTEM] Menjalankan Bot dengan Residential Proxy...`);
+            const proxyMatch = process.env.PROXY_URL.match(/^(https?|socks[45]?):\/\/(.+):(.+)@(.+?):(\d+)$/i);
+            if (proxyMatch) {
+                browserSetup.proxy = {
+                    server: `${proxyMatch[1]}://${proxyMatch[4]}:${proxyMatch[5]}`,
+                    username: proxyMatch[2],
+                    password: proxyMatch[3]
+                };
+            } else {
+                browserSetup.proxy = { server: process.env.PROXY_URL };
+            }
+        }
+
+        const context = await chromium.launchPersistentContext(USER_DATA_DIR, browserSetup);
 
 
         
