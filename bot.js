@@ -1077,42 +1077,44 @@ async function triggerMetaMaskPopup(context) {
                     return { px, py, target };
                 }).catch(() => null);
 
-                // Anti-Idle Jitter
-                const jX = 500 + Math.floor(Math.random() * 20) - 10;
-                const jY = 500 + Math.floor(Math.random() * 20) - 10;
-                await gamePage.mouse.move(jX, jY).catch(() => {});
+                // Anti-Idle Jitter (ringan, tidak ganggu fokus game)
+                await gamePage.evaluate(() => {
+                    if (typeof canvas !== 'undefined') {
+                        canvas.dispatchEvent(new MouseEvent('mousemove', {
+                            clientX: Math.floor(Math.random() * 100) + 400,
+                            clientY: Math.floor(Math.random() * 100) + 400,
+                            bubbles: true
+                        }));
+                    }
+                }).catch(() => {});
 
                 if (!radar || !radar.target) {
                     if (loopCount % 5 === 0) log("-> [RADAR] Area bersih. Menggali lebih dalam...");
-                    await gamePage.keyboard.down('ArrowDown');
-                    await gamePage.waitForTimeout(1000);
-                    await gamePage.keyboard.up('ArrowDown');
-                    await gamePage.waitForTimeout(200);
+                    // Gunakan tryMove() internal game — lebih andal dari keyboard
+                    await gamePage.evaluate(() => {
+                        if (typeof tryMove === 'function') tryMove(0, 1);
+                    }).catch(() => {});
+                    await gamePage.waitForTimeout(400);
                     continue;
                 }
 
                 const { px, py, target } = radar;
                 if (loopCount % 3 === 0) {
-                    const prefix = target.rarity >= 40 ? "⭐ [RARE]" : "-> [RADAR]";
+                    const prefix = target.rarity >= 999 ? "⭐ [RARE]" : "-> [RADAR]";
                     log(`${prefix} Target: ${target.name} di (${target.x}, ${target.y}). Jarak: ${target.realDist.toFixed(1)}`);
                 }
 
-                // Navigasi GoTo (X dulu baru Y)
-                let arah = '';
-                if (target.x > px) arah = 'ArrowRight';
-                else if (target.x < px) arah = 'ArrowLeft';
-                else if (target.y > py) arah = 'ArrowDown';
-                else if (target.y < py) arah = 'ArrowUp';
+                // Navigasi GoTo menggunakan tryMove() internal game (X dulu baru Y)
+                // tryMove(dx, dy) — langsung panggil fungsi engine tanpa simulasi keyboard
+                await gamePage.evaluate(({ tx, ty, px, py }) => {
+                    if (typeof tryMove !== 'function') return;
+                    if (tx > px)       tryMove(1, 0);   // Gerak kanan
+                    else if (tx < px)  tryMove(-1, 0);  // Gerak kiri
+                    else if (ty > py)  tryMove(0, 1);   // Gerak bawah
+                    else if (ty < py)  tryMove(0, -1);  // Gerak atas
+                }, { tx: target.x, ty: target.y, px, py }).catch(() => {});
 
-                if (arah) {
-                    await gamePage.focus('canvas').catch(() => {});
-                    await gamePage.keyboard.down(arah);
-                    const durasi = Math.floor(Math.random() * 150) + 350; 
-                    await gamePage.waitForTimeout(durasi);
-                    await gamePage.keyboard.up(arah);
-                }
-                
-                await gamePage.waitForTimeout(100);
+                await gamePage.waitForTimeout(280);
             }
 
         } catch (web3Err) {
