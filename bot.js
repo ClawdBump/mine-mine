@@ -1105,16 +1105,24 @@ async function triggerMetaMaskPopup(context) {
                 }
 
                 // Navigasi GoTo menggunakan tryMove() internal game (X dulu baru Y)
-                // tryMove(dx, dy) — langsung panggil fungsi engine tanpa simulasi keyboard
+                // Panggil 3x berturut-turut dengan jeda kecil untuk meniru efek "tahan tombol"
                 await gamePage.evaluate(({ tx, ty, px, py }) => {
                     if (typeof tryMove !== 'function') return;
-                    if (tx > px)       tryMove(1, 0);   // Gerak kanan
-                    else if (tx < px)  tryMove(-1, 0);  // Gerak kiri
-                    else if (ty > py)  tryMove(0, 1);   // Gerak bawah
-                    else if (ty < py)  tryMove(0, -1);  // Gerak atas
+                    let dx = 0, dy = 0;
+                    if (tx > px)      dx = 1;
+                    else if (tx < px) dx = -1;
+                    else if (ty > py) dy = 1;
+                    else if (ty < py) dy = -1;
+
+                    // Panggil langsung 3x — game engine sendiri yang throttle via getMoveCooldown()
+                    if (dx !== 0 || dy !== 0) {
+                        tryMove(dx, dy);
+                        tryMove(dx, dy);
+                        tryMove(dx, dy);
+                    }
                 }, { tx: target.x, ty: target.y, px, py }).catch(() => {});
 
-                await gamePage.waitForTimeout(280);
+                await gamePage.waitForTimeout(100);
             }
 
         } catch (web3Err) {
