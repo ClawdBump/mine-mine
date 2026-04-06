@@ -938,9 +938,52 @@ async function triggerMetaMaskPopup(context) {
             // Semua logika dalam SATU loop sekuensial
             // TIDAK ADA setInterval — semua berjalan berurutan
             let loopCount = 0;
+            let lastDiagTime = Date.now();
+            const DIAG_INTERVAL_MS = 5 * 60 * 1000; // Laporan setiap 5 menit
             
             while (true) {
                 loopCount++;
+
+                // ===== DIAGNOSTIK GEM (Setiap 5 Menit) =====
+                if (Date.now() - lastDiagTime >= DIAG_INTERVAL_MS) {
+                    lastDiagTime = Date.now();
+                    try {
+                        const diagData = await gamePage.evaluate(() => {
+                            const pending   = parseFloat(localStorage.getItem('bai_pending_gem') || '0');
+                            const total     = parseFloat(localStorage.getItem('bai_total_gem') || '0');
+                            const redeemed  = parseFloat(localStorage.getItem('bai_redeemed_gem') || '0');
+                            const capHit    = typeof _sessionCapHit !== 'undefined' ? _sessionCapHit : null;
+                            const backoffMs = typeof _earnBackoffUntil !== 'undefined'
+                                ? Math.max(0, _earnBackoffUntil - Date.now())
+                                : 0;
+                            const hasSession = typeof _sessionId !== 'undefined' && !!_sessionId;
+                            const wallet    = typeof walletAddress !== 'undefined' ? walletAddress : null;
+                            const unreported = typeof _unreportedGEM !== 'undefined' ? _unreportedGEM : 0;
+                            return { pending, total, redeemed, capHit, backoffMs, hasSession, wallet, unreported };
+                        });
+
+                        log('\n╔═══════════════ DIAGNOSTIC GEM ════════════════╗');
+                        log(`║  Wallet    : ${diagData.wallet ? diagData.wallet.slice(0,6)+'...'+diagData.wallet.slice(-4) : 'BELUM CONNECT'}`);
+                        log(`║  Pending   : ${diagData.pending.toLocaleString()} GEM  (belum di-cashout)`);
+                        log(`║  Total     : ${diagData.total.toLocaleString()} GEM  (semua sesi)`);
+                        log(`║  Redeemed  : ${diagData.redeemed.toLocaleString()} GEM  (sudah cashout)`);
+                        log(`║  Unreported: ${diagData.unreported.toFixed(2)} GEM  (antrian ke server)`);
+                        log(`║  Sesi      : ${diagData.hasSession ? '✓ AKTIF' : '✗ TIDAK ADA (akan dibuat ulang)'}`);
+                        if (diagData.capHit === true) {
+                            log(`║  Status    : ⛔ SESSION CAP TERCAPAI! GEM BERHENTI DIKIRIM`);
+                            log(`║  Solusi    : Refresh halaman game atau restart bot`);
+                        } else if (diagData.backoffMs > 0) {
+                            log(`║  Status    : ⏳ RATE LIMITED - tunggu ${Math.ceil(diagData.backoffMs/1000)}s lagi`);
+                        } else {
+                            log(`║  Status    : ✓ Normal - GEM mengalir ke server`);
+                        }
+                        log('╚════════════════════════════════════════════════╝\n');
+                    } catch (e) {
+                        log('[DIAG] Gagal membaca status GEM dari browser.');
+                    }
+                }
+
+
                 
                 // ===== CEK STATUS PAUSE DARI USER =====
                 if (isUserPaused) {
