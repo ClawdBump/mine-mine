@@ -1077,24 +1077,19 @@ async function triggerMetaMaskPopup(context) {
                     return { px, py, target };
                 }).catch(() => null);
 
-                // Anti-Idle Jitter (ringan, tidak ganggu fokus game)
-                await gamePage.evaluate(() => {
-                    if (typeof canvas !== 'undefined') {
-                        canvas.dispatchEvent(new MouseEvent('mousemove', {
-                            clientX: Math.floor(Math.random() * 100) + 400,
-                            clientY: Math.floor(Math.random() * 100) + 400,
-                            bubbles: true
-                        }));
-                    }
-                }).catch(() => {});
+                // Anti-Idle Jitter
+                const jX = 550 + Math.floor(Math.random() * 20) - 10;
+                const jY = 550 + Math.floor(Math.random() * 20) - 10;
+                await gamePage.mouse.move(jX, jY).catch(() => {});
 
                 if (!radar || !radar.target) {
                     if (loopCount % 5 === 0) log("-> [RADAR] Area bersih. Menggali lebih dalam...");
-                    // Gunakan tryMove() internal game — lebih andal dari keyboard
-                    await gamePage.evaluate(() => {
-                        if (typeof tryMove === 'function') tryMove(0, 1);
-                    }).catch(() => {});
-                    await gamePage.waitForTimeout(400);
+                    // Paksa fokus ke canvas sebelum tekan tombol
+                    await gamePage.evaluate(() => { try { document.getElementById('gameCanvas')?.focus(); document.body.focus(); } catch(e){} }).catch(() => {});
+                    await gamePage.keyboard.down('ArrowDown');
+                    await gamePage.waitForTimeout(800);
+                    await gamePage.keyboard.up('ArrowDown');
+                    await gamePage.waitForTimeout(150);
                     continue;
                 }
 
@@ -1104,23 +1099,24 @@ async function triggerMetaMaskPopup(context) {
                     log(`${prefix} Target: ${target.name} di (${target.x}, ${target.y}). Jarak: ${target.realDist.toFixed(1)}`);
                 }
 
-                // Navigasi GoTo menggunakan tryMove() internal game (X dulu baru Y)
-                // Panggil 3x berturut-turut dengan jeda kecil untuk meniru efek "tahan tombol"
-                await gamePage.evaluate(({ tx, ty, px, py }) => {
-                    if (typeof tryMove !== 'function') return;
-                    let dx = 0, dy = 0;
-                    if (tx > px)      dx = 1;
-                    else if (tx < px) dx = -1;
-                    else if (ty > py) dy = 1;
-                    else if (ty < py) dy = -1;
+                // Navigasi keyboard — paksa fokus ke canvas agar keydown tidak hilang
+                let arah = '';
+                if (target.x > px)      arah = 'ArrowRight';
+                else if (target.x < px) arah = 'ArrowLeft';
+                else if (target.y > py) arah = 'ArrowDown';
+                else if (target.y < py) arah = 'ArrowUp';
 
-                    // Panggil langsung 3x — game engine sendiri yang throttle via getMoveCooldown()
-                    if (dx !== 0 || dy !== 0) {
-                        tryMove(dx, dy);
-                        tryMove(dx, dy);
-                        tryMove(dx, dy);
-                    }
-                }, { tx: target.x, ty: target.y, px, py }).catch(() => {});
+                if (arah) {
+                    // Fokus agresif: coba gameCanvas dulu, fallback ke body
+                    await gamePage.evaluate(() => {
+                        const c = document.getElementById('gameCanvas');
+                        if (c) { c.focus(); } else { document.body.focus(); }
+                    }).catch(() => {});
+                    await gamePage.keyboard.down(arah);
+                    const durasi = Math.floor(Math.random() * 150) + 350;
+                    await gamePage.waitForTimeout(durasi);
+                    await gamePage.keyboard.up(arah);
+                }
 
                 await gamePage.waitForTimeout(100);
             }
