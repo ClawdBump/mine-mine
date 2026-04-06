@@ -301,7 +301,7 @@ async function triggerMetaMaskPopup(context) {
     try {
         let browserSetup = {
             headless: false,
-            viewport: { width: 1366, height: 900 },
+            viewport: null, // Biarkan Chromium mendeteksi ukuran layar sendiri (Fix tampilan kepotong)
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
             ignoreDefaultArgs: ['--enable-automation'],
             args: [
@@ -314,7 +314,8 @@ async function triggerMetaMaskPopup(context) {
                 '--disable-dev-shm-usage',
                 '--disable-software-rasterizer',
                 '--disable-infobars',
-                '--window-position=0,0'
+                '--window-position=0,0',
+                '--window-size=1366,1024' // Paksa ukuran layar agar konsisten dengan noVNC
             ]
         };
 
