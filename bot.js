@@ -12,6 +12,24 @@ const fs = require('fs');
 const dotEnvPath = path.join(__dirname, '.env');
 const dotEnvExists = fs.existsSync(dotEnvPath);
 
+// ============================================================
+// GLOBAL ERROR HANDLER: Menahan crash "Target closed"
+// dari stealth plugin yang sering terjadi saat ganti halaman
+// =====================================
+process.on('unhandledRejection', (reason) => {
+    const msg = reason?.message || '';
+    if (msg.includes('Target closed') || msg.includes('cdpSession') || msg.includes('onPageCreated')) {
+        // Abaikan error "Target closed" dari stealth plugin (tidak berbahaya)
+        return;
+    }
+    log(`[ERROR UNHANDLED] ${reason}`);
+});
+
+process.on('uncaughtException', (err) => {
+    if (err?.message?.includes('Target closed')) return;
+    log(`[FATAL ERROR] ${err.stack || err}`);
+});
+
 const SEED_PHRASE = process.env.SECRET_SEED_PHRASE;
 const PASSWORD = 'BotPassword123!';
 
@@ -358,6 +376,8 @@ async function triggerMetaMaskPopup(context) {
             await pageIpCheck.goto('https://api.ipify.org', { timeout: 15000 });
             const currentIp = await pageIpCheck.evaluate(() => document.body.innerText.trim());
             log(`[SYSTEM] ✓ BERHASIL! Browser berjalan terlindungi dibalik IP: ${currentIp}`);
+            // Tunggu sebentar sebelum tutup agar stealth plugin tidak crash (Target closed)
+            await pageIpCheck.waitForTimeout(1000); 
             await pageIpCheck.close();
         } catch (e) {
             log(`[SYSTEM] ❌ PERINGATAN: Gagal mengecek IP atau Proxy mati/salah format! Error: ${e.message}`);
