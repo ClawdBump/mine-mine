@@ -61,6 +61,32 @@ function log(msg) {
 // Variabel global untuk mereferensikan halaman game utama
 let mainGamePage = null;
 let isUserPaused = false; // Flag Pause dari terminal
+let forceDiagnostic = false; // Pemicu manual diagnostik 'd'
+let forceManualSync = false; // Pemicu manual sinkronisasi 's'
+
+// ============================================================
+// TERMINAL INPUT: Menangkap shortcut keyboard
+// =====================================
+if (process.stdin.isTTY) {
+    process.stdin.setRawMode(true);
+    process.stdin.setEncoding('utf8');
+    process.stdin.resume();
+    process.stdin.on('data', (key) => {
+        if (key === '\u0003') process.exit(); // Ctrl+C untuk keluar
+        
+        const k = key.toLowerCase();
+        if (k === 'p') {
+            isUserPaused = !isUserPaused;
+            log(isUserPaused ? "  [INPUT] ⏸ BOT DI-PAUSE (Tekan 'p' lagi untuk lanjut)" : "  [INPUT] ▶ BOT DILANJUTKAN");
+        } else if (k === 'd') {
+            forceDiagnostic = true;
+            log("  [INPUT] 📊 Memicu Diagnostic Log segera...");
+        } else if (k === 's') {
+            forceManualSync = true;
+            log("  [INPUT] 🔄 Memicu Manual Sync (Setor GEM ke Server)...");
+        }
+    });
+}
 
 // ============================================================
 // GLOBAL MONITOR: Menangani PopUp MetaMask di Latar Belakang
@@ -997,8 +1023,10 @@ async function triggerMetaMaskPopup(context) {
                 loopCount++;
 
                 // ===== DIAGNOSTIK GEM (Setiap 5 Menit) =====
-                if (Date.now() - lastDiagTime >= DIAG_INTERVAL_MS) {
+                // --- DIAGNOSTIK LOG ---
+                if (Date.now() - lastDiagTime >= DIAG_INTERVAL_MS || forceDiagnostic) {
                     lastDiagTime = Date.now();
+                    forceDiagnostic = false;
                     try {
                         const diagData = await gamePage.evaluate(() => {
                             const pending   = parseFloat(localStorage.getItem('bai_pending_gem') || '0');
@@ -1041,12 +1069,53 @@ async function triggerMetaMaskPopup(context) {
                 if (isUserPaused) {
                     if (loopCount % 5 === 0) log("-> [PAUSE] Bot sedang manual pause (Tekan 'p' di terminal untuk lanjut)...");
                     
-                    // Pastikan tombol dlepas saat pause
+                    // Pastikan tombol dilepas saat pause
                     for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
                         await gamePage.keyboard.up(key).catch(() => {});
                     }
                     await gamePage.waitForTimeout(1000);
                     continue;
+                }
+
+                // ===== SMART SYNC: Sinkronisasi Saldo ke Server =====
+                // Pemicu: Manual (tombol 's') atau Otomatis (jika saldo unreported > 5000)
+                let unreportedAmount = 0;
+                try {
+                    unreportedAmount = await gamePage.evaluate(() => typeof _unreportedGEM !== 'undefined' ? _unreportedGEM : 0).catch(() => 0);
+                } catch(e) {}
+
+                if (forceManualSync || unreportedAmount > 5000) {
+                    const isManual = forceManualSync;
+                    forceManualSync = false;
+                    
+                    log(`\n[SYNC] ${isManual ? 'MANUAL' : 'AUTO'} - Mendeteksi ${unreportedAmount.toFixed(0)} GEM belum terlapur.`);
+                    log(`[SYNC] Menghentikan aktivitas tambang sejenak untuk sinkronisasi...`);
+                    
+                    // Lepas semua tombol keyboard sebelum sync
+                    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+                        await gamePage.keyboard.up(key).catch(() => {});
+                    }
+
+                    // Panggil fungsi internal _flushGEM(true) berkali-kali sampai bersih
+                    const syncResult = await gamePage.evaluate(async () => {
+                        if (typeof _flushGEM !== 'function') return "FINGERPRINT_MISSING";
+                        try {
+                            // Coba kirim 3-5 kali dengan jeda pendek jika banyak
+                            await _flushGEM(true);
+                            return "SUCCESS";
+                        } catch(err) { return err.message; }
+                    }).catch(e => e.message);
+
+                    if (syncResult === "SUCCESS") {
+                        log(`[SYNC] ✓ Sinkronisasi berhasil dikirim. Menunggu respon server...`);
+                        await gamePage.waitForTimeout(3000); // Beri waktu server memproses
+                    } else {
+                        log(`[SYNC] ✗ Gagal sinkronisasi: ${syncResult}`);
+                    }
+                    
+                    // Jika otomatis, biarkan lanjut loop. Jika manual, tampilkan log terbaru
+                    if (isManual) forceDiagnostic = true; 
+                    continue; 
                 }
                 
                 // ----- CEK 1: Apakah karakter mati? (Prioritas Tertinggi) -----
