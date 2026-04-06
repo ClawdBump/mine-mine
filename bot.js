@@ -299,9 +299,17 @@ async function triggerMetaMaskPopup(context) {
     }
 
     try {
+        // Deteksi OS: Jika Linux (VPS) gunakan mode tanpa GPU, jika Windows/Mac biarkan GPU aktif
+        const isLinux = process.platform === 'linux';
+        if (isLinux) {
+            log('[SYSTEM] Mode VPS/Linux terdeteksi — GPU dinonaktifkan (mode headless aman).');
+        } else {
+            log('[SYSTEM] Mode Lokal terdeteksi — GPU AKTIF (Turnstile Captcha akan berfungsi normal).');
+        }
+
         let browserSetup = {
             headless: false,
-            viewport: null, // Biarkan Chromium mendeteksi ukuran layar sendiri (Fix tampilan kepotong)
+            viewport: null,
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
             ignoreDefaultArgs: ['--enable-automation'],
             args: [
@@ -310,14 +318,20 @@ async function triggerMetaMaskPopup(context) {
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-gpu',
-                '--disable-dev-shm-usage',
-                '--disable-software-rasterizer',
                 '--disable-infobars',
                 '--window-position=0,0',
-                '--window-size=1366,1024' // Paksa ukuran layar agar konsisten dengan noVNC
+                '--window-size=1366,1024',
+                // Flag GPU hanya aktif di Linux (VPS) — di Windows/Mac dibiarkan agar Turnstile bisa pakai GPU asli
+                ...(isLinux ? [
+                    '--disable-gpu',
+                    '--disable-dev-shm-usage',
+                    '--disable-software-rasterizer',
+                ] : [
+                    '--disable-dev-shm-usage', // Tetap dipakai di semua OS untuk stabilitas memori
+                ])
             ]
         };
+
 
         if (process.env.PROXY_URL) {
             log(`[SYSTEM] Menjalankan Bot dengan Residential Proxy...`);
