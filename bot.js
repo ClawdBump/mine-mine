@@ -1031,47 +1031,49 @@ async function triggerMetaMaskPopup(context) {
                     
                     const px = player.x;
                     const py = player.y;
-                    const radius = 25;
-                    let target = null;
-                    let minScore = Infinity;
+                    const radius = 40; // ⬆ Diperluas dari 25 ke 40 tile agar jangkauan lebih jauh
 
-                    // Definisikan nilai kelangkaan — BAICRYSTAL & VOIDORE sangat diprioritaskan
-                    const rarityMap = {
-                        "EMERALD": 50,       // Fallback saja
-                        "BAICRYSTAL": 250,   // ⭐⭐ Prioritas Tinggi
-                        "VOIDORE": 300       // ⭐⭐⭐ Prioritas Tertinggi
-                    };
+                    // Daftar gem berdasarkan prioritas
+                    const PRIORITY_GEMS = ["BAICRYSTAL", "VOIDORE"];   // ⭐⭐⭐ Prioritas WAJIB
+                    const FALLBACK_GEMS = ["EMERALD"];                 // Fallback jika tidak ada gem langka
 
-                    const targetGems = ["EMERALD", "BAICRYSTAL", "VOIDORE"];
+                    let prioTarget = null;   // Target BAI/VOID
+                    let prioScore  = Infinity;
+                    let fallTarget = null;   // Target Emerald
+                    let fallScore  = Infinity;
 
                     for (let y = py - radius; y <= py + radius; y++) {
                         for (let x = px - radius; x <= px + radius; x++) {
                             const tile = getTile(x, y);
-                            const def = BLOCK_DEF[tile];
-                            
-                            // MODIFIKASI: Hanya ambil target spesifik (Emerald, Baicrystal, Voidore)
-                            if (def && def.name && targetGems.includes(def.name.toUpperCase())) {
-                                const oreName = def.name.toUpperCase();
-                                const dx = x - px;
-                                const dy = y - py;
-                                const dist = Math.sqrt(dx * dx + dy * dy);
-                                
-                                const rarityScore = rarityMap[oreName] || 0;
-                                
-                                // Bonus kedalaman (masih dipertahankan agar bot cenderung ke bawah jika skor sama)
-                                const depthBonus = dy * 0.15; 
+                            const def  = BLOCK_DEF[tile];
+                            if (!def || !def.name) continue;
 
-                                // LOGIKA BARU: Rarity score dikalikan 2 untuk memberikan dampak besar pada prioritas
-                                // Semakin besar pengurang, semakin "kecil" finalScore, sehingga menjadi target utama
-                                const finalScore = dist - (rarityScore * 2) - depthBonus;
+                            const oreName = def.name.toUpperCase();
+                            const dx   = x - px;
+                            const dy   = y - py;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            // Sedikit bonus ke bawah (kedalaman)
+                            const depthBonus = dy * 0.1;
+                            const score = dist - depthBonus;
 
-                                if (finalScore < minScore) {
-                                    minScore = finalScore;
-                                    target = { x, y, name: def.name, realDist: dist, rarity: rarityScore };
+                            if (PRIORITY_GEMS.includes(oreName)) {
+                                // Void Ore lebih tinggi daripada BAI Crystal
+                                const voidBonus = oreName === "VOIDORE" ? 5 : 0;
+                                if (score - voidBonus < prioScore) {
+                                    prioScore = score - voidBonus;
+                                    prioTarget = { x, y, name: def.name, realDist: dist, rarity: 999 };
+                                }
+                            } else if (FALLBACK_GEMS.includes(oreName)) {
+                                if (score < fallScore) {
+                                    fallScore = score;
+                                    fallTarget = { x, y, name: def.name, realDist: dist, rarity: 50 };
                                 }
                             }
                         }
                     }
+
+                    // FIRST PASS: Jika ada BAI/VOID, selalu utamakan mereka
+                    const target = prioTarget ?? fallTarget;
                     return { px, py, target };
                 }).catch(() => null);
 
