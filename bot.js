@@ -334,6 +334,19 @@ async function triggerMetaMaskPopup(context) {
 
         const context = await chromium.launchPersistentContext(USER_DATA_DIR, browserSetup);
 
+        // ==============================
+        // DIAGNOSTIK PROXY: Cek IP Publik
+        // ==============================
+        log("[SYSTEM] Memeriksa status Proxy dan IP Publik Browser...");
+        try {
+            const pageIpCheck = await context.newPage();
+            await pageIpCheck.goto('https://api.ipify.org', { timeout: 15000 });
+            const currentIp = await pageIpCheck.evaluate(() => document.body.innerText.trim());
+            log(`[SYSTEM] ✓ BERHASIL! Browser berjalan terlindungi dibalik IP: ${currentIp}`);
+            await pageIpCheck.close();
+        } catch (e) {
+            log(`[SYSTEM] ❌ PERINGATAN: Gagal mengecek IP atau Proxy mati/salah format! Error: ${e.message}`);
+        }
 
         
         // ==============================
