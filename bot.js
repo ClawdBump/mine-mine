@@ -386,6 +386,24 @@ async function triggerMetaMaskPopup(context) {
             log("[CRITICAL] Browser Context TELAH TERTUTUP! Sesuatu mematikan Chrome.");
         });
 
+        // =====================================
+        // CSP BYPASS: Hapus header Content-Security-Policy
+        // agar Stealth Plugin bisa bekerja penuh (tidak diblokir eval())
+        // =====================================
+        await context.route('**/*', async (route, request) => {
+            try {
+                const response = await route.fetch();
+                const headers = { ...response.headers() };
+                // Hapus header CSP yang memblokir eval() dari stealth plugin
+                delete headers['content-security-policy'];
+                delete headers['content-security-policy-report-only'];
+                await route.fulfill({ response, headers });
+            } catch (e) {
+                await route.continue().catch(() => {});
+            }
+        });
+        log('[SYSTEM] CSP Bypass aktif — Stealth Plugin akan bekerja penuh.');
+
         // Jalankan monitor di latar belakang (Non-blocking)
         startMetaMaskMonitor(context).catch(err => log(`[CRITICAL] Monitor Error: ${err.message}`));
 
