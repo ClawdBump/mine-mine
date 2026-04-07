@@ -388,15 +388,20 @@ async function triggerMetaMaskPopup(context) {
 
         if (process.env.PROXY_URL) {
             log(`[SYSTEM] Menjalankan Bot dengan Residential Proxy...`);
-            const proxyMatch = process.env.PROXY_URL.match(/^(https?|socks[45]?):\/\/(.+):(.+)@(.+?):(\d+)$/i);
+            // Bersihkan URL dari spasi atau garis miring di akhir
+            const cleanedProxy = process.env.PROXY_URL.trim().replace(/\/$/, '');
+            const proxyMatch = cleanedProxy.match(/^(https?|socks[45]?):\/\/(.+):(.+)@(.+?):(\d+)$/i);
+            
             if (proxyMatch) {
                 browserSetup.proxy = {
                     server: `${proxyMatch[1]}://${proxyMatch[4]}:${proxyMatch[5]}`,
                     username: proxyMatch[2],
                     password: proxyMatch[3]
                 };
+                log(`[SYSTEM] Proxy Auth Terdeteksi: ${proxyMatch[2]}`);
             } else {
-                browserSetup.proxy = { server: process.env.PROXY_URL };
+                browserSetup.proxy = { server: cleanedProxy };
+                log(`[SYSTEM] Proxy Server Terdeteksi: ${cleanedProxy}`);
             }
         }
 
