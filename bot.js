@@ -63,6 +63,7 @@ let mainGamePage = null;
 let isUserPaused = false; // Flag Pause dari terminal
 let forceDiagnostic = false; // Pemicu manual diagnostik 'd'
 let forceManualSync = false; // Pemicu manual sinkronisasi 's'
+let lastKeyPressTime = 0; // Untuk mencegah trigger ganda (debounce)
 
 // ============================================================
 // TERMINAL INPUT: Menangkap shortcut keyboard
@@ -74,7 +75,15 @@ if (process.stdin.isTTY) {
     process.stdin.on('data', (key) => {
         if (key === '\u0003') process.exit(); // Ctrl+C untuk keluar
         
+        // Debounce: Abaikan jika ditekan terlalu cepat (kurang dari 500ms)
+        const now = Date.now();
+        if (now - lastKeyPressTime < 500) return;
+        
         const k = key.toLowerCase();
+        if (k === 'p' || k === 'd' || k === 's') {
+            lastKeyPressTime = now; // Catat waktu penekanan terakhir
+        }
+
         if (k === 'p') {
             isUserPaused = !isUserPaused;
             log(isUserPaused ? "  [INPUT] ⏸ BOT DI-PAUSE (Tekan 'p' lagi untuk lanjut)" : "  [INPUT] ▶ BOT DILANJUTKAN");
@@ -1088,32 +1097,50 @@ async function triggerMetaMaskPopup(context) {
                     const isManual = forceManualSync;
                     forceManualSync = false;
                     
-                    log(`\n[SYNC] ${isManual ? 'MANUAL' : 'AUTO'} - Mendeteksi ${unreportedAmount.toFixed(0)} GEM belum terlapur.`);
-                    log(`[SYNC] Menghentikan aktivitas tambang sejenak untuk sinkronisasi...`);
+                    // CEK BACKOFF (Rate Limit) sebelum mencoba sync
+                    const backoffInfo = await gamePage.evaluate(() => {
+                        const backoff = typeof _earnBackoffUntil !== 'undefined' ? Math.max(0, _earnBackoffUntil - Date.now()) : 0;
+                        const capHit = typeof _sessionCapHit !== 'undefined' ? _sessionCapHit : false;
+                        return { backoff, capHit };
+                    }).catch(() => ({ backoff: 0, capHit: false }));
+
+                    if (backoffInfo.capHit) {
+                        log(`[SYNC] ⛔ GAGAL: Session Cap tercapai. Sinkronisasi dihentikan.`);
+                        await gamePage.waitForTimeout(5000);
+                        continue;
+                    }
+
+                    if (backoffInfo.backoff > 0) {
+                        if (isManual) log(`[SYNC] ⏳ Server sedang sibuk (Rate Limit). Menunggu ${Math.ceil(backoffInfo.backoff/1000)} detik lagi...`);
+                        else if (loopCount % 5 === 0) log(`[SYNC] ⏳ Auto-Sync tertahan Rate Limit (${Math.ceil(backoffInfo.backoff/1000)}s).`);
+                        await gamePage.waitForTimeout(Math.min(5000, backoffInfo.backoff));
+                        continue;
+                    }
+
+                    log(`\n[SYNC] ${isManual ? 'MANUAL' : 'AUTO'} - Sinkronisasi ${unreportedAmount.toFixed(0)} GEM ke server...`);
                     
-                    // Lepas semua tombol keyboard sebelum sync
+                    // Lepas semua tombol
                     for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
                         await gamePage.keyboard.up(key).catch(() => {});
                     }
 
-                    // Panggil fungsi internal _flushGEM(true) berkali-kali sampai bersih
-                    const syncResult = await gamePage.evaluate(async () => {
-                        if (typeof _flushGEM !== 'function') return "FINGERPRINT_MISSING";
-                        try {
-                            // Coba kirim 3-5 kali dengan jeda pendek jika banyak
-                            await _flushGEM(true);
-                            return "SUCCESS";
-                        } catch(err) { return err.message; }
-                    }).catch(e => e.message);
+                    // Panggil fungsi internal
+                    await gamePage.evaluate(async () => {
+                        if (typeof _flushGEM === 'function') await _flushGEM(true);
+                    }).catch(() => {});
 
-                    if (syncResult === "SUCCESS") {
-                        log(`[SYNC] ✓ Sinkronisasi berhasil dikirim. Menunggu respon server...`);
-                        await gamePage.waitForTimeout(3000); // Beri waktu server memproses
+                    await gamePage.waitForTimeout(3000); // Tunggu respon network
+
+                    // VERIFIKASI: Apakah jumlahnya berkurang?
+                    const afterSync = await gamePage.evaluate(() => typeof _unreportedGEM !== 'undefined' ? _unreportedGEM : 0).catch(() => unreportedAmount);
+                    
+                    if (afterSync < unreportedAmount) {
+                        log(`[SYNC] ✓ BERHASIL! Saldo antrian berkurang menjadi ${afterSync.toFixed(0)}.`);
                     } else {
-                        log(`[SYNC] ✗ Gagal sinkronisasi: ${syncResult}`);
+                        log(`[SYNC] ⚠ PERINGATAN: Laporan dikirim tapi saldo tidak berkurang. Server mungkin menolak atau Rate Limit baru saja aktif.`);
+                        await gamePage.waitForTimeout(5000); // Beri jeda lebih lama jika gagal
                     }
                     
-                    // Jika otomatis, biarkan lanjut loop. Jika manual, tampilkan log terbaru
                     if (isManual) forceDiagnostic = true; 
                     continue; 
                 }
