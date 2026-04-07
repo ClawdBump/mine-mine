@@ -25,18 +25,18 @@ fi
 sudo pkill -9 Xvfb chrome x11vnc websockify node 2>/dev/null
 sudo rm -rf /tmp/.X${DISP_NUM}-lock /tmp/.X11-unix/X${DISP_NUM} 2>/dev/null
 
-# 1. Menyalakan Xvfb
-echo "-> Menyalakan Layar Virtual :${DISP_NUM} (1366x1024)..."
-Xvfb :${DISP_NUM} -screen 0 1366x1024x24 &
+# 1. Menyalakan Xvfb (16-bit untuk Performa Tinggi)
+echo "-> Menyalakan Layar Virtual :${DISP_NUM} (1366x1024x16)..."
+Xvfb :${DISP_NUM} -screen 0 1366x1024x16 &
 sleep 3
 
 export DISPLAY=:${DISP_NUM}
 
-# 2. Menyalakan x11vnc (DIOPTIMASI agar tidak lag seperti SSH lama)
-# Mengaktifkan kembali -ncache 10 -ncache_cr untuk kehalusan visual
-echo "-> Menyalakan VNC Server (Optimized)..."
+# 2. Menyalakan x11vnc (DEEP OPTIMIZATION)
+# Menggunakan 16-bit agar data lebih ringan + optimasi kompresi
+echo "-> Menyalakan VNC Server (Deep Optimized)..."
 x11vnc -display :${DISP_NUM} -forever -nopw -noxdamage -shared -rfbport ${RFB_P} -bg \
-       -ncache 10 -ncache_cr -noxrecord -noxfixes
+       -ncache 10 -ncache_cr -scrollcopyrect -wireframe -noxrecord -noxfixes
 
 # 3. Menyalakan noVNC Proxy
 echo "-> Menyalakan noVNC Bridge di port ${VNC_P}..."
